@@ -1,0 +1,154 @@
+/*
+ * WebKit Autoloader Installer - Main Entry Point
+ *
+ * This is a native PS5 ELF that installs a homescreen shortcut, starts a
+ * temporary HTTP server, opens the browser to cache a page (or set of pages),
+ * then exits. On subsequent launches from the homescreen, the cached content
+ * loads offline.
+ *
+ * This file handles: process init, signal setup, MHD lifecycle, shutdown.
+ */
+
+#include <microhttpd.h>
+#include <signal.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/syscall.h>
+#include <sys/sysctl.h>
+#include <unistd.h>
+
+#include "wkali.h"
+#include "http_server.h"
+#include "ps5_launcher.h"
+#include "app_installer.h"
+
+/* Defined in http_server.c — set to 0 by the /cache_complete route */
+extern atomic_int http_keep_running;
+
+static pid_t find_pid(const char *name) {
+    int mib[4] = {1, 14, 8, 0};
+    pid_t mypid = getpid();
+    pid_t pid = -1;
+    size_t buf_size;
+    uint8_t *buf;
+
+    if (sysctl(mib, 4, 0, &buf_size, 0, 0)) {
+        wkali_log("[WKALI] sysctl failed\n");
+        return -1;
+    }
+
+    if (!(buf = malloc(buf_size))) {
+        wkali_log("[WKALI] malloc failed\n");
+        return -1;
+    }
+
+    if (sysctl(mib, 4, buf, &buf_size, 0, 0)) {
+        wkali_log("[WKALI] sysctl failed\n");
+        free(buf);
+        return -1;
+    }
+
+    /* KERN_PROC_ALL scan — raw offsets into FreeBSD 12's struct kinfo_proc
+     * as exposed by the PS5 kernel: ki_pid at offset 72, ki_tdname at 447
+     * (matches the layout used by the ps5-payload-dev SDK's klib). These
+     * are ABI-specific; re-check if the kernel struct ever changes. */
+    for (uint8_t *ptr = buf; ptr < (buf + buf_size);) {
+        int ki_structsize = *(int *)ptr;
+        pid_t ki_pid = *(pid_t *)&ptr[72];
+        char *ki_tdname = (char *)&ptr[447];
+
+        ptr += ki_structsize;
+        if (!strcmp(name, ki_tdname) && ki_pid != mypid) {
+            pid = ki_pid;
+        }
+    }
+
+    free(buf);
+    return pid;
+}
+
+/* PS5 System Calls (Internal) */
+extern int sceNetCtlInit();
+extern int sceUserServiceInitialize(void *);
+
+__attribute__((used)) volatile const char wkali_version_sig[] =
+    "WKALI_VER:" WKAL_FULL_VERSION;
+
+int main(void) {
+    struct MHD_Daemon *daemon;
+    pid_t pid;
+
+    syscall(SYS_thr_set_name, -1, WKALI_THREAD_NAME);
+
+    /* Kill previous installer instances */
+    while ((pid = find_pid(WKALI_THREAD_NAME)) > 0) {
+        if (kill(pid, SIGKILL)) {
+            wkali_log("[WKALI] kill failed\n");
+            return EXIT_FAILURE;
+        }
+        sleep(1);
+    }
+
+    wkali_log("[WKALI] WebKit Autoloader Installer v%s by PLK (built %s) starting on port %d...\n",
+                   WKAL_FULL_VERSION, WKAL_BUILD_TIME, WKALI_PORT);
+
+    /* Initialize PS5 System Services */
+    int err;
+    if ((err = sceNetCtlInit()) == 0) {
+        wkali_log("[WKALI] Network Controller initialized.\n");
+    } else {
+        wkali_log("[WKALI] sceNetCtlInit failed: 0x%08X\n", err);
+    }
+
+    int user_prio = 256;
+    if ((err = sceUserServiceInitialize(&user_prio)) == 0) {
+        wkali_log("[WKALI] User Service initialized.\n");
+    } else {
+        wkali_log("[WKALI] sceUserServiceInitialize failed: 0x%08X\n", err);
+    }
+
+    /* Install/update the homescreen app unconditionally */
+    wkali_install_app_if_needed();
+
+    /* Signal Resilience */
+    signal(SIGPIPE, SIG_IGN);
+    signal(SIGHUP, SIG_IGN);
+    signal(SIGTERM, SIG_IGN);
+
+    /* Start the MHD daemon */
+    daemon = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION | MHD_USE_DEBUG,
+                              WKALI_PORT, NULL, NULL, &http_on_request,
+                              NULL, MHD_OPTION_END);
+
+    if (NULL == daemon) {
+        wkali_log("[WKALI] Failed to start HTTP daemon!\n");
+        wkali_notify("WebKit Autoloader Installer: Error\nHTTP server failed to start");
+        return 1;
+    }
+
+    wkali_log("[WKALI] Server running. Waiting for the browser to cache content...\n");
+
+    /* Launch browser to the local server (fixed constant input — the buffer
+     * is generously sized for the current ~25-char URL) */
+    char browser_url[128];
+    snprintf(browser_url, sizeof(browser_url), "http://127.0.0.1:%d",
+             WKALI_PORT);
+    ps5_launch_browser(browser_url);
+
+    /* Main loop — runs until /cache_complete is hit by the browser */
+    while (atomic_load(&http_keep_running)) {
+        usleep(100000); /* 100ms sleep */
+    }
+
+    wkali_log("[WKALI] Shutting down...\n");
+    wkali_notify("WebKit Autoloader v%s cached successfully!", WKAL_FULL_VERSION);
+    if (daemon)
+        MHD_stop_daemon(daemon);
+
+    sleep(1);
+
+    return 0;
+}

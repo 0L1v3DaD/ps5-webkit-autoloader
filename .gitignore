@@ -1,0 +1,49 @@
+# Compiled Binaries
+*.elf
+*.bin
+*.o
+
+# Generated File Registry
+include/file_registry.h
+include/file_registry.c
+include/.file_registry.stamp
+
+# Generated version header (tools/gen_version.py)
+include/wkali_version.h
+
+# Generated PS5 app metadata (tools/gen_version.py, template: assets/param.json.template)
+assets/param.json
+
+# Generated icon assets (tools/gen_icons.py, master: assets/icon.svg)
+assets/icon0.png
+assets/icon.ico
+frontend/installer-page/favicon.svg
+frontend/autoloader/favicon.svg
+frontend/installer-page/logo.svg
+frontend/autoloader/logo.svg
+
+# Generated frontend stage (installer-page + autoloader merged at build time)
+frontend/dist/
+
+# PC host build artifacts (tools/build_host.py, PyInstaller)
+webkit-autoloader-host.py
+webkit-autoloader-host_v*.py
+webkit-autoloader-host.exe
+webkit-autoloader-host_v*.exe
+webkit-autoloader-host.spec
+build/
+dist/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# Reference materials
+.for_reference/

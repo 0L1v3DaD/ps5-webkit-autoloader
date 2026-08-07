@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en" manifest="/cache.appcache">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <title>WebKit Autoloader Installer v[[VERSION_PLACEHOLDER]] by PLK (built [[BUILD_TIME_PLACEHOLDER]])</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      -webkit-box-sizing: border-box;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      background: -webkit-linear-gradient(180deg, #0f172a 0%, #0b1220 100%);
+      color: #e2e8f0;
+      display: -webkit-box;
+      display: -webkit-flex;
+      display: flex;
+      -webkit-box-align: center;
+      -webkit-align-items: center;
+      align-items: center;
+      -webkit-box-pack: center;
+      -webkit-justify-content: center;
+      justify-content: center;
+      min-height: 100%;
+      text-align: center;
+    }
+
+    #footer {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      -webkit-transform: translateX(-50%);
+      transform: translateX(-50%);
+      font-size: 0.75rem;
+      color: #4b5563;
+      line-height: 1.5;
+      text-align: center;
+      z-index: 20;
+    }
+
+    main {
+      max-width: 42rem;
+      padding: 2rem;
+    }
+
+    .logo {
+      display: inline-block;
+      width: 8rem;
+      height: 8rem;
+      margin-bottom: 2rem;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-bottom: 1rem;
+    }
+
+    p {
+      font-size: 1.375rem;
+      line-height: 1.5;
+      color: #94a3b8;
+    }
+
+    #status {
+      font-size: 1.5rem;
+      font-weight: 500;
+      color: #38bdf8;
+      margin-bottom: 0.5rem;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <img class="logo" src="/logo.svg" alt="WebKit Autoloader" />
+    <h1>WebKit Autoloader Installer</h1>
+    <p id="status">Loading&hellip;</p>
+    <p id="detail"></p>
+  </main>
+
+  <footer id="footer">WebKit Autoloader Installer v[[VERSION_PLACEHOLDER]] by PLK (built [[BUILD_TIME_PLACEHOLDER]])<br />This project is free and open source: github.com/itsPLK/ps5-webkit-autoloader</footer>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var statusEl = document.getElementById('status');
+      var detailEl = document.getElementById('detail');
+      var completed = false;
+      var probeOk = false;
+
+      var AUTOLOADER_URL = '/app/index.html';
+
+      function setInstalled() {
+        statusEl.textContent = 'Installed successfully';
+        detailEl.textContent = 'The WebKit Autoloader shortcut is now on your PS5 homescreen. You can close this page.';
+      }
+
+      function setCaching() {
+        statusEl.textContent = 'Caching content...';
+        detailEl.textContent = 'Please wait a moment.';
+      }
+
+      function setOffline() {
+        statusEl.textContent = 'Starting WebKit Autoloader...';
+        goToAutoloader();
+      }
+
+      function goToAutoloader() {
+        window.location.replace(AUTOLOADER_URL);
+      }
+
+      function probeServer() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/version', true);
+        xhr.timeout = 1000;
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+              probeOk = true;
+              setCaching();
+            } else {
+              setOffline();
+            }
+          }
+        };
+        xhr.onerror = function () {
+          setOffline();
+        };
+        xhr.ontimeout = function () {
+          setOffline();
+        };
+        xhr.send();
+      }
+
+      function signalCacheComplete() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/cache_complete', true);
+        xhr.timeout = 3000;
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState === 4 && xhr.status === 200) {
+            setInstalled();
+          }
+        };
+        xhr.send();
+      }
+
+      function maybeSignal() {
+        if (completed) {
+          return;
+        }
+        completed = true;
+        signalCacheComplete();
+      }
+
+      window.addEventListener('load', function () {
+        probeServer();
+
+        /* Online install: once everything is cached, signal the installer
+           (it exits on /cache_complete) and show the "Installed" message —
+           no redirect; the shortcut is launched from the homescreen.
+           Offline (homescreen launch): setOffline() navigates to the cached
+           autoloader immediately. The timer below is a fallback: it always
+           signals the installer, and navigates only when the server was
+           never detected (e.g. the probe hung silently). */
+        setTimeout(function () {
+          maybeSignal();
+          if (!probeOk) {
+            goToAutoloader();
+          }
+        }, 8000);
+      });
+
+      if (window.applicationCache) {
+        window.applicationCache.addEventListener('cached', maybeSignal);
+        window.applicationCache.addEventListener('noupdate', maybeSignal);
+        window.applicationCache.addEventListener('updateready', function () {
+          if (completed) {
+            return;
+          }
+          if (window.applicationCache.status === window.applicationCache.UPDATEREADY) {
+            window.applicationCache.swapCache();
+            window.location.reload();
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+
+</html>
