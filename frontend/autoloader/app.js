@@ -185,7 +185,16 @@
     }
     for (; mirroredLines < lines.length; mirroredLines++) {
       var line = lines[mirroredLines].trim();
-      if (line && /FAIL|ERROR|REFUSED|REBOOT|failed|panic|exception/i.test(line)) {
+      if (!line) continue;
+      /* Curated release log: surface the per-row progress ("> "), the
+         milestone marks (STAGE / POOPS / LATCH / OFFSETS / ...), and
+         anything that looks like a failure — never the full raw stream
+         (that floods the UI and hides the actual result). */
+      if (/^>/.test(line) || /^\[\+\]/.test(line)
+        || /^(STAGE[1-5]|ALLPROC-CHECK|ALIASES-REPAIRED|POOPS-COMPLETE|POOPS-VERDICT|LATCH-HELD|LATCH-READ|OFFSETS-READY|WEBKIT-BASE|MODULE-BASES|SOCKETS|SPAWN|WAKEGATE)/.test(line)) {
+        uiLog('[log] ' + line, 'info');
+      } else if (/FAIL|ERROR|REFUSED|REBOOT|failed|panic|exception/i.test(line)
+        || /^\[-\]/.test(line)) {
         uiLog('[log] ' + line, 'error');
       }
     }
