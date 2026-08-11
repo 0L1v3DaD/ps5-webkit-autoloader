@@ -16,7 +16,7 @@ LIBS     := $(TARGET)/lib/libmicrohttpd.a \
 
 # Source Files
 SRCS := src/main.c src/http_server.c src/app_installer.c \
-        src/notification.c src/ps5_launcher.c src/log.c
+        src/notification.c src/ps5_launcher.c src/log.c src/inflate.c
 ELF := installer.elf
 
 # Generated file registry
@@ -71,7 +71,23 @@ $(ICON0) $(ICON_ICO) $(FAVICON_INSTALLER) $(FAVICON_AUTOLOADER) $(LOGO_INSTALLER
 
 $(FILE_REGISTRY_H) $(FILE_REGISTRY_C): $(FILE_REGISTRY_STAMP)
 
-$(FILE_REGISTRY_STAMP): $(FRONTEND_FILES) version icons
+# Copy third_party/slopkit -> frontend/autoloader/slopkit and apply our patch.
+# The copy is gitignored and regenerated on every build, so the submodule
+# stays pristine.
+.PHONY: slopkit-prepare
+slopkit-prepare:
+	@echo "Preparing slopkit copy..."
+	./tools/apply_slopkit_patch.sh
+
+# Fetch the bundled ps5-unified-autoloader payload ELF from its pinned GitHub
+# release (scripts/download_deps.sh). Idempotent: skips when the payload is
+# already present and verified, so offline rebuilds still work.
+.PHONY: payload-deps
+payload-deps:
+	@echo "Fetching ps5-unified-autoloader payload..."
+	./scripts/download_deps.sh
+
+$(FILE_REGISTRY_STAMP): $(FRONTEND_FILES) version icons slopkit-prepare payload-deps
 	@echo "Staging frontend into $(FRONTEND_STAGE)/..."
 	rm -rf $(FRONTEND_STAGE)
 	mkdir -p $(FRONTEND_STAGE)/app
@@ -87,16 +103,22 @@ $(ELF): $(FILE_REGISTRY_H) $(FILE_REGISTRY_C) $(SRCS) $(ICON0)
 	@echo "Stripping $(ELF)..."
 	$(STRIP) $(ELF)
 
-$(WKAL_HOST): $(WKAL_HOST_SOURCES) version icons
-	@echo "Building $(WKAL_HOST) (embedding frontend/autoloader and overrides)..."
-	$(PYTHON) tools/build_host.py --frontend $(FRONTEND_AUTOLOADER) --overrides pc-host/overrides --input pc-host/host.py --output $(WKAL_HOST)
+# The PC host is the one-time setup flow: it serves the installer ELF (the
+# homescreen-app installer) instead of the bundled unified-autoloader payload.
+# HOST_PAYLOAD overrides the payload path (build_release.sh passes the
+# versioned ELF it already built); it defaults to $(ELF).
+HOST_PAYLOAD ?= $(ELF)
+
+$(WKAL_HOST): $(WKAL_HOST_SOURCES) version icons $(HOST_PAYLOAD) slopkit-prepare payload-deps
+	@echo "Building $(WKAL_HOST) (embedding frontend/autoloader, overrides and the installer ELF)..."
+	$(PYTHON) tools/build_host.py --frontend $(FRONTEND_AUTOLOADER) --overrides pc-host/overrides --input pc-host/host.py --output $(WKAL_HOST) --payload $(HOST_PAYLOAD)
 
 host: $(WKAL_HOST)
 
 # Serve the autoloader frontend locally (browser preview) with the same
 # /app/ path mapping and version tokens as the real build.
 .PHONY: dev
-dev:
+dev: slopkit-prepare payload-deps
 	$(PYTHON) tools/dev_server.py
 
 clean:
@@ -104,4 +126,4 @@ clean:
 	rm -f $(ELF) $(FILE_REGISTRY_H) $(FILE_REGISTRY_C) $(FILE_REGISTRY_STAMP)
 	rm -f $(WKAL_HOST) $(VERSION_HEADER)
 
-.PHONY: all host dev clean
+.PHONY: all host dev clean slopkit-prepare payload-deps

@@ -49,9 +49,11 @@ else
     exit 1
 fi
 
-# 5. Build standalone webkit-autoloader-host.py with the frontend embedded
+# 5. Build standalone webkit-autoloader-host.py with the frontend embedded.
+#    HOST_PAYLOAD points at the versioned installer ELF built in step 4 (the
+#    PC host serves it as the autoload payload instead of the bundled one).
 echo "[2/2] Building webkit-autoloader-host.py (embedded frontend)..."
-make host
+make host HOST_PAYLOAD="$OUTPUT_ELF"
 if [ $? -ne 0 ]; then
     echo "      !!! webkit-autoloader-host.py build FAILED!"
     exit 1

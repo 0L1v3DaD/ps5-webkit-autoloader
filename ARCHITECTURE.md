@@ -15,10 +15,11 @@ Both methods ultimately serve the exact same frontend payload (`frontend/autoloa
 
 ## 1. The Frontend Payload (`frontend/autoloader/`)
 This is the core WebKit Autoloader UI. It contains the HTML, CSS, and JS that the user actually sees on their PS5.
-- It is designed to be completely standalone.
 - It is served by both the ELF and the PC Host.
-- The page is a loader shell: a startup splash (logo + title, animated out after ~1.5s), a monospace log terminal, a progress bar, and a bottom-centered footer with the version/build-time and an open-source notice. The exploit steps behind it are stubbed demo functions (`runWebkitExploit`/`runKernelExploit`/`runPayload` in `app.js`) that log and advance the progress bar with sample timeouts, so the real WebKit exploit can be dropped in later without restructuring.
+- The page is a loader shell: a startup splash (logo + title, animated out after ~1.5s), a monospace log terminal, a progress bar, and a bottom-centered footer with the version/build-time and an open-source notice.
+- The exploit itself runs in a same-origin **iframe** (`#exploit`, visible bottom-right for debugging) pointing at slopkit's `poops.html` with an `?autoload=<payload>` query param (see [slopkit integration](#6-slopkit-integration-and-the-patch-workflow)). `app.js` mirrors slopkit's live screen (`#scr`), stage (`#stage`), early log (`#early`) and summary (`#summary`) into the log terminal, so the UI shows exactly what the chain is doing — plus the `?autoload` result posted back via `postMessage`.
 - `index.html` carries the full build version both in its `<title>` and in the visible `<footer>` via the `[[VERSION_PLACEHOLDER]]`/`[[BUILD_TIME_PLACEHOLDER]]` tokens (replaced at build time — see [Versioning](#5-versioning)).
+- A full-screen `#testGate` overlay (test-build builds only) shows the "THIS IS A TEST BUILD / UNTESTED, MAY NOT WORK" banner with a Discord QR invite. The exploit only starts after the user presses **Continue** and the splash has fully faded out — `app.js` sets the iframe `src` only then, and the log mirror stays inert until the gate is accepted (`chainStarted`).
 - **Important**: It does *not* contain caching logic itself. Caching is handled exclusively by the ELF's wrapper page (`installer-page`).
 
 ---
@@ -34,7 +35,8 @@ The native installer is a PS5 payload compiled into an `.elf` binary using the P
    - `installer-page/index.html`: A wrapper UI that initiates the caching process.
    - `cache.appcache`: The manifest file that tells the PS5 browser to save the files offline.
    - `app/`: The actual `frontend/autoloader/` files.
-5. The ELF programmatically launches the PS5 browser, pointing it to the internal server. The browser caches the files, hits a `/cache_complete` endpoint, and the ELF cleanly shuts down.
+   The frontend files are embedded **compressed** (raw DEFLATE, via the vendored `src/inflate.c` — puff.c) and inflated on demand when served; `gen_file_registry.py` emits the compressed registry.
+5. The ELF programmatically launches the PS5 browser, pointing it to the internal server (URL carries `?v=<version>` so the browser never serves a stale AppCache master entry). The browser caches the files, hits a `/cache_complete` endpoint, and the ELF cleanly shuts down.
 6. The installed homescreen app's `deeplinkUri` points at `http://127.0.0.1:18181/app/index.html` — the cached autoloader page — so launching it later serves the offline UI directly (no intermediate wrapper flash). A reboot after installing is recommended so the exploit chain runs fresh from a clean boot.
 7. From then on, the user simply launches the "WebKit Autoloader" from their homescreen, and it loads the cached UI perfectly offline.
 
@@ -48,17 +50,19 @@ For users who are not yet jailbroken and need to use a WebKit exploit to run pay
 2. **DNS Spoofing**: It intercepts DNS requests. Any request for `manuals.playstation.net` is redirected to the PC's IP address. All other PlayStation telemetry domains are blocked (returning `NXDOMAIN`).
 3. **HTTPS Bridging**: It runs an HTTPS server on port 443 (required) with an in-memory, self-signed SSL certificate generated on the fly to seamlessly bypass the PS5's strict HTTPS requirements for the User's Guide. If port 443 is unavailable, the script exits with an error; an unavailable optional HTTP port only prints a warning.
 4. **URL Interception**: The PS5 requests language-specific URLs (e.g., `/document/en/ps5/`). The script intercepts these and transparently maps them to the root of the payload.
-5. **Fat Binary (Embedded Payload)**: The `build_host.py` tool merges the `frontend/autoloader/` and `pc-host/overrides/` directories, compresses them into a zip file, encodes them in Base64, and injects them directly into the Python script.
-6. When the script runs, it serves the frontend assets *directly from memory*, requiring zero external files. 
-7. The banner shows the full build version (`INSTALLER-HOST v{version}`), injected by `build_host.py` at build time — see [Versioning](#5-versioning).
+5. **Fat Binary (Embedded Payload)**: The `build_host.py` tool merges the `frontend/autoloader/` and `pc-host/overrides/` directories, compresses them into a zip file, encodes them in Base64, and injects them directly into the Python script. Unused slopkit assets (its bundled payload servers, readme.png) and the throwaway `.git` repo are filtered out at build time.
+6. When the script runs, it serves the frontend assets *directly from memory*, requiring zero external files.
+7. **Installer payload**: the PC host is the one-time setup flow, so it serves the **installer ELF** as the autoload payload (`payloads/payload.elf` in the zip is replaced by the built `installer.elf` via `--payload`, see the Makefile's `HOST_PAYLOAD`).
+8. The banner shows the full build version (`INSTALLER-HOST v{version}`), injected by `build_host.py` at build time — see [Versioning](#5-versioning).
 
 ---
 
 ## 4. Build System & CI/CD
 The project employs a robust build system to generate artifacts for both pathways.
 
-- **`Makefile`**: The central orchestrator. It regenerates the version header, stages the frontend files, generates C headers for the embedded ELF files (`tools/gen_file_registry.py`), and invokes the compiler. `make print-version` prints the current full version. `make dev` runs `tools/dev_server.py`, a zero-dependency local server that serves `frontend/autoloader/` with the same `/app/` path mapping and version-token injection as the real build — for quick browser previews.
-- **`build_release.sh`**: A wrapper that spins up a Dockerized PS5 SDK environment to cleanly build the ELF without requiring the user to install the SDK locally. It also runs `tools/build_host.py` to generate the fat versioned `webkit-autoloader-host_v{version}.py` script, and renames the ELF to `webkit-autoloader-installer_v{version}.elf`.
+- **`Makefile`**: The central orchestrator. It regenerates the version header, runs `slopkit-prepare` (see below), stages the frontend files, generates C headers for the embedded ELF files (`tools/gen_file_registry.py`), and invokes the compiler. `make print-version` prints the current full version. `make dev` runs `tools/dev_server.py`, a zero-dependency local server that serves `frontend/autoloader/` with the same `/app/` path mapping and version-token injection as the real build — for quick browser previews.
+- **`tools/gen_file_registry.py`**: walks `frontend/dist/`, filters out unused files (slopkit's bundled payload servers, `readme.png`, the throwaway `.git`), **compresses** each remaining file (raw DEFLATE) and emits `include/file_registry.{h,c}`. The server inflates on demand via `src/inflate.c`.
+- **`build_release.sh`**: A wrapper that spins up a Dockerized PS5 SDK environment to cleanly build the ELF without requiring the user to install the SDK locally. It also runs `make host HOST_PAYLOAD=...` to generate the fat versioned `webkit-autoloader-host_v{version}.py` script (embedding the versioned installer ELF), and renames the ELF to `webkit-autoloader-installer_v{version}.elf`.
 - **GitHub Actions (`.github/workflows/release.yml`)**: Automates the release process with `BUILD_TYPE=stable`. It builds the ELF (via Ubuntu Docker), the Python script, and then passes the Python script to a `windows-latest` runner to compile it into a standalone `.exe` using PyInstaller.
 
 ## 5. Versioning
@@ -73,6 +77,44 @@ Driven by `tools/gen_version.py`: the base version lives in `include/wkali.h`. D
 
 ---
 
+## 6. Slopkit Integration and the Patch Workflow
+
+The WebKit exploit chain is [slopkit](https://github.com/jordyidk/slopkit), pinned as a pristine git
+submodule at `third_party/slopkit/`. It is **never modified in place**. All of our integration
+changes live in `tools/slopkit-autoload.patch`, which is applied to a throwaway copy.
+
+### The copy + patch pipeline (`tools/apply_slopkit_patch.sh`)
+
+The build needs slopkit under `frontend/autoloader/slopkit/` (gitignored — see `.gitignore`).
+The Makefile runs `slopkit-prepare` automatically before staging, host builds and `make dev`:
+
+1. **Fresh copy**: `third_party/slopkit` → `frontend/autoloader/slopkit` (repo metadata stripped).
+2. **Throwaway git repo**: `git init` + commit "slopkit pristine". This lets `git apply` handle
+   binary diffs (the deleted `mmhmm-cats-ps5.gif`) — plain `git apply` on a non-repo dir cannot.
+3. **Apply the patch**: `tools/slopkit-autoload.patch` is applied and committed as
+   "Apply WKAL autoloader patch" (author `wkal <wkal@localhost>`).
+
+### What the patch does (all additive, in `slopkit/slopkit/poops.html`)
+
+- Adds an `?autoload=<name>` query param. After the chain finishes and elfldr is up, slopkit
+  waits 4 s (for elfldr to accept connections on port 9021) and auto-sends the payload from
+  `../../payloads/<name>` — our own `frontend/autoloader/payloads/`, keeping the submodule pristine.
+- Adds a hidden payload-menu tile so `payloadIsListed()` passes.
+- Raises `PAYLOAD_MAX_SIZE` to 4 MiB (the bundled payloads are larger than slopkit's 2 MiB default).
+- Posts `{type:"wkal", kind:"autoload", ok, bytes}` to the parent page for the UI.
+- Removes the ~1 MB cat gif (preload, image, `setCatResult` simplified).
+
+### Updating slopkit
+
+```bash
+git submodule update --remote third_party/slopkit
+tools/apply_slopkit_patch.sh     # re-applies the patch; errors if upstream changed the patched files
+```
+
+If the patch no longer applies, regenerate it with `git -C third_party/slopkit diff > tools/slopkit-autoload.patch`.
+
+---
+
 ## Key Conventions
 When modifying this project, keep the following in mind:
 - **Changing the UI**: Edit files in `frontend/autoloader/`. These changes will automatically propagate to both the ELF and the PC Host on the next build.
@@ -80,3 +122,4 @@ When modifying this project, keep the following in mind:
 - **Path Resolution**: The ELF serves the autoloader at `/app/`. The PC Host intercepts `/app/` paths and maps them to the root. If you add new asset paths in the HTML, be aware of this mapping.
 - **Caching**: Never put `manifest="/cache.appcache"` in the `autoloader/index.html`. Caching is strictly the domain of `installer-page/index.html` during the ELF installation phase.
 - **PC Host Logic**: If you modify `host.py`, you must run `make host` (or `build_release.sh`) to inject the payload and generate the final `webkit-autoloader-host_v{version}.py`.
+- **Slopkit changes**: Never edit `third_party/slopkit/` or the generated `frontend/autoloader/slopkit/` directly — edit `tools/slopkit-autoload.patch` (or regenerate it) instead.

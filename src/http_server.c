@@ -12,6 +12,7 @@
 #include "wkali.h"
 #include "http_server.h"
 #include "file_registry.h"
+#include "inflate.h"
 
 /* CORS is intentionally `*`: the installer page is also served from the PC
  * host (manuals.playstation.net over HTTPS), which cross-origin XHRs this
@@ -81,9 +82,50 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
     } else {
         const FileEntry *entry = registry_lookup(url);
         if (entry) {
-            resp = MHD_create_response_from_buffer(entry->size,
-                                                   (void *)entry->data,
-                                                   MHD_RESPMEM_PERSISTENT);
+            void *payload = (void *)entry->data;
+            size_t payload_size = entry->size;
+            enum MHD_ResponseMemoryMode mem_mode = MHD_RESPMEM_PERSISTENT;
+            unsigned char *decompressed = NULL;
+
+            if (entry->compressed) {
+                /* Inflate the raw-DEFLATE blob (src/inflate.c, vendored puff)
+                 * into a fresh heap buffer; MHD frees it with MUST_FREE. */
+                decompressed = malloc(entry->orig_size);
+                if (!decompressed) {
+                    const char *oom = "503 Out of Memory\n";
+                    resp = MHD_create_response_from_buffer(strlen(oom),
+                                                           (void *)oom,
+                                                           MHD_RESPMEM_PERSISTENT);
+                    MHD_add_response_header(resp, "Content-Type", "text/plain");
+                    http_status = MHD_HTTP_SERVICE_UNAVAILABLE;
+                    add_cors_headers(resp);
+                    enum MHD_Result ret = MHD_queue_response(conn, http_status, resp);
+                    MHD_destroy_response(resp);
+                    return ret;
+                }
+                unsigned long destlen = entry->orig_size;
+                unsigned long sourcelen = entry->size;
+                int err = puff(decompressed, &destlen, entry->data, &sourcelen);
+                if (err != 0) {
+                    free(decompressed);
+                    const char *bad = "500 Inflate Error\n";
+                    resp = MHD_create_response_from_buffer(strlen(bad),
+                                                           (void *)bad,
+                                                           MHD_RESPMEM_PERSISTENT);
+                    MHD_add_response_header(resp, "Content-Type", "text/plain");
+                    http_status = MHD_HTTP_INTERNAL_SERVER_ERROR;
+                    add_cors_headers(resp);
+                    enum MHD_Result ret = MHD_queue_response(conn, http_status, resp);
+                    MHD_destroy_response(resp);
+                    return ret;
+                }
+                payload = decompressed;
+                payload_size = destlen;
+                mem_mode = MHD_RESPMEM_MUST_FREE;
+            }
+
+            resp = MHD_create_response_from_buffer(payload_size, payload,
+                                                   mem_mode);
             MHD_add_response_header(resp, "Content-Type", entry->content_type);
             if (strcmp(url, ROUTE_CACHE_MANIFEST) == 0 ||
                 strstr(entry->content_type, "text/html") != NULL) {

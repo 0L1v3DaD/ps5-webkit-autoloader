@@ -131,11 +131,11 @@ int main(void) {
 
     wkali_log("[WKALI] Server running. Waiting for the browser to cache content...\n");
 
-    /* Launch browser to the local server (fixed constant input — the buffer
-     * is generously sized for the current ~25-char URL) */
-    char browser_url[128];
-    snprintf(browser_url, sizeof(browser_url), "http://127.0.0.1:%d",
-             WKALI_PORT);
+    /* Launch the browser at a versioned URL so the old AppCache master entry
+     * for "/" is never served from the previous install. */
+    char browser_url[256];
+    snprintf(browser_url, sizeof(browser_url),
+             "http://127.0.0.1:%d/?v=%s", WKALI_PORT, WKAL_FULL_VERSION);
     ps5_launch_browser(browser_url);
 
     /* Main loop — runs until /cache_complete is hit by the browser */

@@ -42,7 +42,24 @@ def repo_root():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
-def build_zip(frontend_dir, overrides_dir, version, build_time):
+# slopkit's bundled payload menu servers (ftpsrv, gdbsrv, kstuff, ...) are
+# never used by the autoloader — only elfldr + the kexp it boots are needed.
+# The copied slopkit is a throwaway git repo (tools/apply_slopkit_patch.sh),
+# so .git must never be embedded. The payload digest sidecar
+# (payloads/*.sha256) is build-time bookkeeping and must never be served.
+def include_in_zip(rel):
+    if "/.git/" in rel or rel.endswith("/.git"):
+        return False
+    if rel.startswith("slopkit/payloads/"):
+        return rel.endswith(("elfldr-ps5-1360.elf", "kexp_2026_05_25.bin"))
+    if rel == "slopkit/readme.png":
+        return False
+    if rel.startswith("payloads/") and rel.endswith(".sha256"):
+        return False
+    return True
+
+
+def build_zip(frontend_dir, overrides_dir, version, build_time, payload_path=None):
     """Zip the contents of frontend_dir and overrides_dir (merged) into memory."""
     archive = io.BytesIO()
     file_map = {}
@@ -55,6 +72,8 @@ def build_zip(frontend_dir, overrides_dir, version, build_time):
                 continue
             full = os.path.join(root, name)
             rel = os.path.relpath(full, frontend_dir).replace(os.sep, "/")
+            if not include_in_zip(rel):
+                continue
             file_map[rel] = full
 
     # 2. Overrides
@@ -67,6 +86,20 @@ def build_zip(frontend_dir, overrides_dir, version, build_time):
                 full = os.path.join(root, name)
                 rel = os.path.relpath(full, overrides_dir).replace(os.sep, "/")
                 file_map[rel] = full
+
+    # 3. Host payload override: the PC host is the one-time setup flow, so it
+    #    serves the installer ELF instead of the bundled unified-autoloader.
+    #    The virtual path stays the same ("payload.elf") so the
+    #    autoloader's ?autoload= request is unchanged — only the bytes differ.
+    if payload_path:
+        payload_path = os.path.abspath(payload_path)
+        if not os.path.isfile(payload_path):
+            sys.exit(f"Error: payload file not found: {payload_path}")
+        file_map["payloads/payload.elf"] = payload_path
+        print(f"  payload: {payload_path}")
+        print("           -> payloads/payload.elf (installer ELF)")
+    else:
+        print("  payload: bundled payload.elf (default)")
 
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for rel in sorted(file_map.keys()):
@@ -167,6 +200,9 @@ def main(argv=None):
                         help="Source host script (default: pc-host/host.py).")
     parser.add_argument("--output", default=os.path.join(repo_root(), "webkit-autoloader-host.py"),
                         help="Output script (default: webkit-autoloader-host.py).")
+    parser.add_argument("--payload", default=None,
+                        help="ELF to serve as payloads/payload.elf in place of the "
+                             "bundled unified-autoloader (default: bundled payload).")
     args = parser.parse_args(argv)
 
     frontend_dir = os.path.abspath(args.frontend)
@@ -182,7 +218,8 @@ def main(argv=None):
     version_info = get_version_info()
     version = version_info["full"]
     build_time = version_info["build_time"]
-    zip_data, file_map = build_zip(frontend_dir, overrides_dir, version, build_time)
+    zip_data, file_map = build_zip(frontend_dir, overrides_dir, version, build_time,
+                                   payload_path=args.payload)
     
     if not file_map:
         sys.exit(f"Error: no files to embed from {frontend_dir} and {overrides_dir}")

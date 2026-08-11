@@ -11,7 +11,10 @@ Usage: gen_file_registry.py <dist_dir> <header_out> <source_out>
 """
 
 import os
+import posixpath
+import re
 import sys
+import zlib
 
 from gen_version import get_version_info
 
@@ -48,6 +51,25 @@ def detect_content_type(path):
     return CONTENT_TYPES.get(ext, "application/octet-stream")
 
 
+# slopkit ships its own payload menu servers (ftpsrv, gdbsrv, kstuff, ...) that
+# our autoloader never uses — the chain only needs the elfldr it boots and the
+# kexp shellcode that loads it. Skipping the rest keeps the installer ELF ~6 MB
+# smaller. readme.png is a slopkit repo asset, also unused. The copied slopkit
+# is a throwaway git repo (tools/apply_slopkit_patch.sh), so .git must never
+# be embedded. The payload digest sidecar (payloads/*.sha256) is build-time
+# bookkeeping and must never be served.
+def include_in_registry(path):
+    if "/.git/" in path or path.endswith("/.git"):
+        return False
+    if path.startswith("/app/slopkit/payloads/"):
+        return path.endswith(("elfldr-ps5-1360.elf", "kexp_2026_05_25.bin"))
+    if path == "/app/slopkit/readme.png":
+        return False
+    if path.startswith("/app/payloads/") and path.endswith(".sha256"):
+        return False
+    return True
+
+
 VERSION_PLACEHOLDER = b"[[VERSION_PLACEHOLDER]]"
 BUILD_TIME_PLACEHOLDER = b"[[BUILD_TIME_PLACEHOLDER]]"
 
@@ -72,6 +94,61 @@ def emit_c_array(out, name, data):
     out.write("};\n")
 
 
+# Compress embedded files with raw DEFLATE (no zlib header), matching the
+# vendored puff.c inflater in src/inflate.c. This roughly halves the registry
+# and keeps the installer ELF small. Files that would not shrink are stored
+# uncompressed instead.
+def compress_entry(data):
+    if len(data) < 64:
+        return data, False
+    co = zlib.compressobj(level=9, wbits=-15)
+    comp = co.compress(data) + co.flush()
+    if len(comp) >= len(data):
+        return data, False
+    return comp, True
+
+
+# The autoloader iframe loads poops.html with this exact query string. AppCache
+# matches URLs exactly (query included), so the manifest must list the full URL
+# or the console serves a fallback document instead of the exploit page.
+# Keep in sync with EXPLOIT_URL in frontend/autoloader/app.js.
+EXPLOIT_IFRAME_URL = (
+    "/app/slopkit/slopkit/poops.html"
+    "?go=1&auto=1&trigger=netcontrol&payload=1"
+    "&autoload=payload.elf&v=17"
+)
+
+# slopkit references its own scripts with cache-busting query strings
+# (e.g. "./core.js?v=10", "main.js?v=16", "../offsets/9.00.js?v=16").
+# AppCache matches URLs exactly, so the manifest must list those query
+# variants too or the console falls back and the module imports fail.
+CACHEBUST_RE = re.compile(r'([A-Za-z0-9_./-]+\.(?:js|css|html|png|jpg|gif))\?v=\d+')
+
+
+def collect_cachebust_urls(files):
+    """Scan staged HTML/JS for query-string script imports (slopkit's ?v=
+    cache-busters) and return their absolute URLs, resolved relative to the
+    referencing file. Offsets are loaded dynamically as ../offsets/<fw>.js?v=16
+    in main.js, so every offsets file gets the ?v=16 variant as well."""
+    urls = set()
+    for path, full in files:
+        try:
+            with open(full, "r", encoding="utf-8", errors="replace") as f:
+                data = f.read()
+        except OSError:
+            continue
+        base = posixpath.dirname(path)
+        for match in CACHEBUST_RE.finditer(data):
+            ref, query = match.group(1), match.group(0)[len(match.group(1)):]
+            resolved = posixpath.normpath(posixpath.join(base, ref))
+            if resolved.startswith("/") and "/slopkit/" in resolved:
+                urls.add(resolved + query)
+    for path, _ in files:
+        if path.startswith("/app/slopkit/offsets/") and path.endswith(".js"):
+            urls.add(path + "?v=16")
+    return sorted(urls)
+
+
 def build_manifest(files, version, build_time):
     lines = [
         "CACHE MANIFEST",
@@ -81,6 +158,8 @@ def build_manifest(files, version, build_time):
         "CACHE:",
     ]
     lines += [path for path, _ in files]
+    lines.append(EXPLOIT_IFRAME_URL)
+    lines += collect_cachebust_urls(files)
     lines += [
         "",
         "NETWORK:",
@@ -124,6 +203,8 @@ def main():
                 continue  # regenerated below
             full = os.path.join(root, name)
             rel = os.path.relpath(full, dist_dir).replace(os.sep, "/")
+            if not include_in_registry(f"/{rel}"):
+                continue
             files.append((f"/{rel}", full))
     files.sort(key=lambda f: f[0])
 
@@ -148,6 +229,8 @@ def main():
         out.write("    const char *path;\n")
         out.write("    const unsigned char *data;\n")
         out.write("    unsigned int size;\n")
+        out.write("    unsigned int orig_size;\n")
+        out.write("    unsigned char compressed;\n")
         out.write("    const char *content_type;\n")
         out.write("} FileEntry;\n")
         out.write("\n")
@@ -168,17 +251,24 @@ def main():
         out.write('#include "file_registry.h"\n')
         out.write("\n")
 
+        entries = []
         for i, (path, full) in enumerate(files):
             with open(full, "rb") as f:
                 data = f.read()
             data = apply_version_placeholder(path, data, version_info["full"], version_info["build_time"])
-            emit_c_array(out, f"file_{i}", data)
+            stored, compressed = compress_entry(data)
+            emit_c_array(out, f"file_{i}", stored)
             out.write("\n")
+            entries.append((path, compressed, len(data), len(stored)))
 
         out.write("const FileEntry file_registry[] = {\n")
         for i, (path, _) in enumerate(files):
             content_type = detect_content_type(path)
-            out.write(f'    {{ "{path}", file_{i}, sizeof(file_{i}), "{content_type}" }},\n')
+            _, compressed, orig_size, stored_size = entries[i]
+            out.write(
+                f'    {{ "{path}", file_{i}, {stored_size}, {orig_size}, '
+                f'{1 if compressed else 0}, "{content_type}" }},\n'
+            )
         out.write("};\n")
         out.write("\n")
         out.write("const unsigned int file_registry_count =\n")

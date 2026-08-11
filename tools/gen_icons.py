@@ -39,7 +39,7 @@ SCALE = (1.0 - 2.0 * PAD_FRACTION) * (VIEWBOX / 2.0) / ART_RADIUS
 TRANSLATE = VIEWBOX * (1.0 - SCALE) / 2.0
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
-BG_GRADIENT = """    <radialGradient id="wkaliBg" cx="50%" cy="50%" r="75%">
+BG_GRADIENT = """    <radialGradient id="wkalBg" cx="50%" cy="50%" r="75%">
       <stop offset="0%" stop-color="#0e182b"/>
       <stop offset="100%" stop-color="#060a13"/>
     </radialGradient>"""
@@ -59,7 +59,7 @@ def build_wrapper_svg(master_src):
         "{bg}\n"
         "{defs}\n"
         "  </defs>\n"
-        '  <rect width="{vb}" height="{vb}" fill="url(#wkaliBg)"/>\n'
+        '  <rect width="{vb}" height="{vb}" fill="url(#wkalBg)"/>\n'
         '  <g transform="translate({t} {t}) scale({s})">\n'
         "{art}\n"
         "  </g>\n"
@@ -85,7 +85,7 @@ def rsvg_render(svg_path, size):
 
 def ql_render(svg_path, size):
     """Render via QuickLook; use a unique temp filename to dodge its cache."""
-    tmpdir = tempfile.mkdtemp(prefix="wkali-icon-")
+    tmpdir = tempfile.mkdtemp(prefix="wkal-icon-")
     tmp_svg = os.path.join(tmpdir, os.urandom(4).hex() + ".svg")
     shutil.copyfile(svg_path, tmp_svg)
     subprocess.run(["qlmanage", "-t", "-s", str(size), "-o", tmpdir, tmp_svg],
@@ -127,7 +127,7 @@ def main():
     wrapper = build_wrapper_svg(master_src)
     render = find_renderer()
 
-    with tempfile.TemporaryDirectory(prefix="wkali-icon-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="wkal-icon-") as tmp:
         wrapper_path = os.path.join(tmp, "icon-bg.svg")
         with open(wrapper_path, "w") as f:
             f.write(wrapper)
