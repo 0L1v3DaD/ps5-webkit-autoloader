@@ -6,8 +6,7 @@
 <p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>9.00&ndash;12.00</b>.</p>
 
 > [!NOTE]
-> Uses an early release of the WebKit exploit ([slopkit](https://github.com/jordyidk/slopkit)). 
-> The autoloader uses the original slopkit under the hood with very minimal changes (via a [patch file](https://github.com/itsPLK/ps5-webkit-autoloader/blob/main/tools/slopkit-autoload.patch)), so there shouldn't be any stability differences. Note that it might not be stable, and on some firmwares it might be more stable than others. It might not be suitable for everyday usage yet.
+> Uses an early release of the [slopkit](https://github.com/jordyidk/slopkit) WebKit exploit under the hood with minimal changes (via a [patch file](https://github.com/itsPLK/ps5-webkit-autoloader/blob/main/tools/slopkit-autoload.patch)), so it should have the same stability as the original. Keep in mind that reliability can vary across firmwares, and it may not be suitable for everyday usage yet.
 
 <p align="center">
     <b>Other Autoloaders:</b><br>
@@ -22,37 +21,29 @@ WebKit exploits are usually loaded by pointing your PS5's DNS at some server hos
 
 This autoloader does it differently:
 
-- **You know exactly what you're loading.** The exploit page and the autoloader are served from your own PC and, after the one-time install, straight from your own PS5 — never from a third-party DNS host.
-- **No reliance on anyone's custom DNS servers.** There's nothing external to go down or change behind your back.
+- **Fully offline, no third-party DNS.** After a one-time install from your PC, everything is served straight from your PS5. There's nothing external to go down or change behind your back.
 - **One-time setup, then a homescreen shortcut.** Once it's installed, you don't need a PC or the network at all — just launch "WebKit Autoloader" from the homescreen and you're done.
 - **Payloads loaded the way you already know.** After the exploit chain runs, your payloads are sent just like in [Y2JB](https://github.com/itsPLK/ps5-y2jb-autoloader) / [BD-JB](https://github.com/itsPLK/ps5-bdjb-autoloader) / [Lua](https://github.com/itsPLK/ps5-lua-autoloader) autoloaders — via **Payload Manager**, or a custom `autoload.txt`.
-
-## How it works
-
-1. **PC Host (custom DNS, one-time)** — run `webkit-autoloader-host.py` on your PC and point your PS5's DNS at it. Opening the "User's Guide" loads the WebKit exploit page directly from your PC (`manuals.playstation.net` is intercepted locally — no third-party host involved). The page runs the exploit and loads **only** the installer payload, which installs the `WKAL00001` "WebKit Autoloader" homescreen app. Nothing else is loaded in this session.
-2. **Reboot once** — the exploit should always run fresh from a clean boot. After the installer finishes, reboot the console so the homescreen shortcut can run the exploit chain cleanly.
-3. **Homescreen shortcut (from now on)** — that's it, you never need the DNS setup again. Every next time, you just launch **WebKit Autoloader** from the homescreen: it loads fully offline, runs the WebKit/kernel exploit chain, and loads your payloads — [Payload Manager](https://github.com/itsPLK/ps5-payload-manager) by default, or a custom [`autoload.txt`](#option-2-manual-config-autoloadtxt) config.
 
 ## Setup Instructions
 
 There are two ways to set up the autoloader, depending on whether you're already jailbroken.
 
-### 🟢 Already jailbroken? Just load the installer ELF
+### Already jailbroken? Just load the installer ELF
 
 1. Download `webkit-autoloader-installer_vX.Y.Z.elf` from the [Releases](https://github.com/itsPLK/ps5-webkit-autoloader/releases) page.
 2. Send it to your PS5 with `elfldr`, or launch it from Payload Manager.
 3. The installer creates the **WebKit Autoloader** app on the homescreen, opens the browser once to cache the autoloader page, and exits.
-4. **Reboot once** — then launch **WebKit Autoloader** from the homescreen from now on. Everything runs offline on the console itself — no PC, no DNS changes, nothing to keep running.
+4. **Reboot once**, then launch **WebKit Autoloader** from the homescreen.
 
-### ⚙️ Not jailbroken yet
+### Not jailbroken yet
 
 If you aren't jailbroken yet, you'll need to host the exploit locally on your PC for the initial setup:
 
-1. Download `webkit-autoloader-host.py` (or the Windows `.exe`) from the [Releases](https://github.com/itsPLK/ps5-webkit-autoloader/releases) page.
-2. Run it on a PC on the same network as your PS5.
-3. On your PS5, set your network's DNS server to your PC's IP address.
-4. On your PS5, open the **User's Guide** from Settings. The **WebKit Autoloader** page loads from your PC — it runs the exploit and loads **only** the installer, which adds the **WebKit Autoloader** app to your homescreen (no payloads are autoloaded in this session).
-5. **Reboot your PS5**, then launch **WebKit Autoloader** from the homescreen. From now on you don't need the PC Host at all — the shortcut runs the full exploit chain and autoloads your payloads offline.
+1. Download `webkit-autoloader-host.py` (or the `.exe`) from the [Releases](https://github.com/itsPLK/ps5-webkit-autoloader/releases) and run it on a PC on your network.
+2. On your PS5, set your network's DNS server to your PC's IP address.
+3. Open the **User's Guide** from Settings to run the installer, which adds the **WebKit Autoloader** app to your homescreen.
+4. **Reboot once**, then launch **WebKit Autoloader** from the homescreen.
 
 ## How to Use
 
@@ -93,38 +84,15 @@ The autoloader content is cached on the console, so updating is exactly the same
 The latest installer payload will re-create the homescreen app and refresh the cached page for you. Your payloads and `autoload.txt` on USB / internal storage are never touched.
 </Details>
 
-<Details>
-<Summary><i>How to use custom ELF Loader version?</i></Summary>
-
-By default, the autoloader uses a custom version of **elfldr** that only accepts connections from the PS5 itself (localhost). This improves security by preventing other devices on your network from sending payloads to your console.
-
-If you want to use a "normal" ELF Loader that allows sending payloads from any device:
-1. Place your custom ELF Loader (e.g. `elfldr.elf`) in the `ps5_autoloader` directory.
-2. Add `elfldr.elf` to your `autoload.txt`.
-3. **Note**: If you are loading other payloads right after `elfldr.elf` in your `autoload.txt`, add a sleep command immediately after it (like `!4000` to sleep for 4 seconds) to give the new ELF Loader time to start up and listen before subsequent payloads are sent.
-
-Example `autoload.txt`:
-```text
-# Load custom ELF Loader
-elfldr.elf
-# Give it 4 seconds to start up (only needed if sending more payloads)
-!4000
-# Send other payloads
-ftpsrv.elf
-```
-</Details>
-
 ---
 
 ## For developers
 
-The exploit chain integration, the slopkit submodule + patch workflow, payload download and
-the internals of the native installer and PC Host are all documented in
-**[ARCHITECTURE.md](ARCHITECTURE.md)**.
+The technical internals and project architecture are documented in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ## Credits
 
-* **[jordyidk](https://github.com/jordyidk)** — [slopkit](https://github.com/jordyidk/slopkit), the WebKit/kernel exploit chain used by this autoloader (slopkit credits its own contributors in its README; note it ships **without an explicit license**)
+* **[jordyidk](https://github.com/jordyidk)** & contributors — [slopkit](https://github.com/jordyidk/slopkit), the WebKit/kernel exploit chain used by this autoloader.
 * **[john-tornblom](https://github.com/john-tornblom)** — [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk/)
 * **[Mark Adler](https://github.com/madler)** — [puff.c](https://github.com/madler/zlib/tree/master/contrib/puff) (used to decompress embedded frontend files)
 * Everyone else contributing to the PS5 homebrew scene.
