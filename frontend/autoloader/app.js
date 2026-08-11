@@ -39,6 +39,20 @@
   var lastFrameUrl = '';
   var repairCount = 0;
 
+  /* slopkit keeps its one-shot latch and its "stopped at …" marker in
+     sessionStorage, which the PS5 browser restores even across reboots (it
+     brings the autoloader tab back up). Clear them right before arming, or a
+     previous interrupted run blocks every retry with "the last run stopped at
+     X but the latch is clear". The iframe is same-origin, so this is exactly
+     the storage the chain reads; the Continue button is the explicit OK to
+     run the full ladder from the top again (never a mid-chain resume). */
+  function clearSlopkitState() {
+    try {
+      sessionStorage.removeItem('slopkit-poops:next');
+      sessionStorage.removeItem('slopkit-poops:latch');
+    } catch (e) { }
+  }
+
   /* Keep in sync with EXPLOIT_IFRAME_URL in tools/gen_file_registry.py — the
      AppCache manifest lists this exact URL so the console can serve it
      offline (AppCache matches URLs including the query string). */
@@ -284,6 +298,7 @@
         /* Splash fade-out takes 480ms after revealExploit(), so start the
            chain only after it is completely gone. */
         setTimeout(function () {
+          clearSlopkitState();
           try {
             exploitEl.src = EXPLOIT_URL;
           } catch (e) {
@@ -293,6 +308,7 @@
       });
     } else {
       chainStarted = true;
+      clearSlopkitState();
       try {
         exploitEl.src = EXPLOIT_URL;
       } catch (e) { }
