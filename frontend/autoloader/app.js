@@ -7,26 +7,15 @@
   var progressBar = document.getElementById('progressBar');
   var progressLabel = document.getElementById('progressLabel');
   var exploitEl = document.getElementById('exploit');
-  var exploitWrap = document.getElementById('exploitWrap');
-  var exploitToggle = document.getElementById('exploitToggle');
 
   /* After a WebProcess crash the PS5 browser restores this page together with
      the iframe at its last URL — the armed exploit URL, which would auto-run
      the chain again. Blank it as early as possible (the iframe element is
      already in the DOM at script parse) so the chain only runs after the
-     test-build gate is accepted. */
+     splash screen. */
   try {
     exploitEl.src = 'about:blank';
   } catch (e) { }
-
-  /* Collapse/expand the debug frame: minimized it becomes a slim bar docked
-     at the bottom of the screen, with the slopkit iframe hidden. */
-  if (exploitWrap && exploitToggle) {
-    exploitToggle.addEventListener('click', function () {
-      var minimized = exploitWrap.classList.toggle('minimized');
-      exploitToggle.textContent = minimized ? '+' : '\u2212';
-    });
-  }
 
   var MAX_LOG_LINES = 80;
   var finished = false;
@@ -40,12 +29,12 @@
   var repairCount = 0;
 
   /* slopkit keeps its one-shot latch and its "stopped at …" marker in
-     sessionStorage, which the PS5 browser restores even across reboots (it
-     brings the autoloader tab back up). Clear them right before arming, or a
-     previous interrupted run blocks every retry with "the last run stopped at
-     X but the latch is clear". The iframe is same-origin, so this is exactly
-     the storage the chain reads; the Continue button is the explicit OK to
-     run the full ladder from the top again (never a mid-chain resume). */
+     sessionStorage. On the PS5 browser the shortcut session can outlive a
+     console reboot, so a previous interrupted run would otherwise block
+     every retry with "the last run stopped at X but the latch is clear".
+     Clear them right before arming so the full ladder always restarts from
+     the top (never a mid-chain resume). The iframe is same-origin, so this
+     is exactly the storage the chain reads. */
   function clearSlopkitState() {
     try {
       sessionStorage.removeItem('slopkit-poops:next');
@@ -81,10 +70,6 @@
 
   window.uiLog = uiLog;
   window.updateProgress = updateProgress;
-
-  window.hideUI = function () {
-    loaderEl.hidden = true;
-  };
 
   function revealExploit() {
     splashEl.classList.add('hide');
@@ -136,12 +121,9 @@
       lastStageCls = '';
       lastSummaryText = '';
       earlyLinesLogged = 0;
-      if (frameUrl && frameUrl !== 'about:blank') {
-        uiLog('[iframe] loaded: ' + frameUrl, 'info');
-      }
     }
-    /* The iframe is intentionally empty until the test-build gate is
-       accepted — nothing to mirror yet. */
+    /* The iframe is intentionally empty until the chain is armed — nothing
+       to mirror yet. */
     if (!chainStarted) return;
 
     var scr = doc.getElementById('scr');
@@ -203,9 +185,8 @@
     }
     for (; mirroredLines < lines.length; mirroredLines++) {
       var line = lines[mirroredLines].trim();
-      if (line) {
-        uiLog(line, /FAIL|ERROR|REFUSED|REBOOT|failed/i.test(line) ? 'error'
-          : /PASS|READY|DONE|SUCCESS|OK/i.test(line) ? 'success' : 'info');
+      if (line && /FAIL|ERROR|REFUSED|REBOOT|failed|panic|exception/i.test(line)) {
+        uiLog('[log] ' + line, 'error');
       }
     }
 
@@ -215,9 +196,11 @@
       lastStageCls = stage.className || '';
       progressLabel.textContent = lastStageText;
       if (lastStageCls.indexOf('bad') !== -1) {
-        uiLog('[slopkit] ' + lastStageText, 'error');
+        uiLog('[stage] ' + lastStageText, 'error');
       } else if (lastStageCls.indexOf('ok') !== -1) {
-        uiLog('[slopkit] ' + lastStageText, 'success');
+        uiLog('[stage] ' + lastStageText, 'success');
+      } else {
+        uiLog('[stage] ' + lastStageText, 'info');
       }
     }
 
@@ -227,8 +210,8 @@
       var summaryLines = summary.textContent.split('\n');
       for (var i = 0; i < summaryLines.length; i++) {
         var sline = summaryLines[i].trim();
-        if (sline) {
-          uiLog('[summary] ' + sline, 'info');
+        if (sline && /FAIL|ERROR|REFUSED|REBOOT|failed|panic/i.test(sline)) {
+          uiLog('[summary] ' + sline, 'error');
         }
       }
       lastSummaryText = summary.textContent;
@@ -272,50 +255,15 @@
        so their lines stream normally). */
     setInterval(mirrorSlopkit, 500);
 
-    /* Test-build gate: the exploit chain only starts after the user presses
-       Continue on the full-screen test notice, and only once the splash has
-       fully faded out — so nothing runs behind the notice or the splash. */
-    var gateEl = document.getElementById('testGate');
-    var proceedBtn = document.getElementById('proceedBtn');
-    if (gateEl && proceedBtn) {
-      /* After a WebProcess crash the browser restores this page together with
-         the iframe at its last URL — the armed exploit URL, which would
-         auto-run the chain again. Blank it so the chain only runs after
-         Continue. */
-      try {
-        exploitEl.src = 'about:blank';
-      } catch (e) { }
+    chainStarted = true;
+    clearSlopkitState();
+    try {
+      exploitEl.src = EXPLOIT_URL;
+    } catch (e) { }
 
-      proceedBtn.addEventListener('click', function () {
-        chainStarted = true;
-        gateEl.classList.add('hide');
-        setTimeout(function () {
-          gateEl.hidden = true;
-        }, 480);
-        setTimeout(function () {
-          revealExploit();
-        }, 1500);
-        /* Splash fade-out takes 480ms after revealExploit(), so start the
-           chain only after it is completely gone. */
-        setTimeout(function () {
-          clearSlopkitState();
-          try {
-            exploitEl.src = EXPLOIT_URL;
-          } catch (e) {
-            uiLog('[ERROR] Could not start the chain: ' + (e && e.message ? e.message : e), 'error');
-          }
-        }, 1500 + 480 + 200);
-      });
-    } else {
-      chainStarted = true;
-      clearSlopkitState();
-      try {
-        exploitEl.src = EXPLOIT_URL;
-      } catch (e) { }
-      setTimeout(function () {
-        revealExploit();
-      }, 1500);
-    }
+    setTimeout(function () {
+      revealExploit();
+    }, 1500);
   }
 
   window.addEventListener('load', start);

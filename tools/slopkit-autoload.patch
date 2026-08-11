@@ -86,12 +86,15 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      }
  }
  
-@@ -1468,6 +1465,20 @@ async function runLadder() {
+@@ -1468,6 +1465,23 @@ async function runLadder() {
          flushMark("ELFLDR-MENU-INPAGE",
              "no-navigation-parked-racers-and-fds-remain-owned-port=9021");
          showPayloadMenu();
 +        if (cfg.autoload) {
 +            stage("autoloading " + cfg.autoload + " in 4 s", "ok");
++            // TODO: replace this fixed 4 s wait with a loop that polls until
++            // elfldr accepts connections (port 9021), like the other
++            // autoloaders do.
 +            setTimeout(function () {
 +                sendPayloadToElfldr(cfg.autoload, "../../payloads/").then(function (r) {
 +                    flushMark("AUTOLOAD-OK", "name=" + cfg.autoload + "-bytes=" + r.bytes);
@@ -107,6 +110,3 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      }
  }
  
- function lastRunText() {
-     if (!LAST_RUN) return "";
-     const age = Math.round((Date.now() - (LAST_RUN.ts || 0)) / 1000);

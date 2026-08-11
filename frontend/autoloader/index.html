@@ -10,31 +10,13 @@
 </head>
 
 <body>
-  <div id="hazardStrip"><span>PRE-RELEASE / TEST BUILD</span></div>
-
   <div id="splash" aria-hidden="false">
     <img class="logo" src="/logo.svg" alt="WebKit Autoloader" />
     <h1>WebKit Autoloader</h1>
   </div>
 
-  <div id="exploitWrap">
-    <div id="exploitBar">
-      <span>debug frame</span>
-      <button id="exploitToggle" type="button" aria-label="Minimize debug frame">&minus;</button>
-    </div>
-    <iframe id="exploit" title="exploit"></iframe>
-  </div>
+  <iframe id="exploit" title="exploit" hidden></iframe>
 
-  <div id="testGate" aria-hidden="false">
-    <div class="gateCard">
-      <h2>THIS IS A TEST BUILD</h2>
-      <p class="untested">UNTESTED, MAY NOT WORK</p>
-      <p class="gateNote">Please share your feedback on GitHub Discussions</p>
-      <img src="/app/discussions-qr.png" alt="GitHub Discussions QR code" />
-      <p class="small">Scan or visit: github.com/itsPLK/ps5-webkit-autoloader/discussions</p>
-      <button id="proceedBtn" type="button">Continue</button>
-    </div>
-  </div>
 
   <main id="loader" hidden>
     <div id="logWrapper">

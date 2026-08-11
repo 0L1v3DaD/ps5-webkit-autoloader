@@ -50,43 +50,11 @@
       z-index: 20;
     }
 
-    /* Test-build hazard strip pinned to the top */
-    #hazardStrip {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 2.6rem;
-      z-index: 30;
-      overflow: hidden;
-      background: -webkit-repeating-linear-gradient(
-        -45deg, #ffd400 0 14px, #111 14px 28px);
-      background: repeating-linear-gradient(
-        -45deg, #ffd400 0 14px, #111 14px 28px);
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      align-items: center;
-      -webkit-box-pack: center;
-      -webkit-justify-content: center;
-      justify-content: center;
-    }
 
-    #hazardStrip span {
-      white-space: nowrap;
-      color: #111;
-      font: 900 1.15rem/1 "Segoe UI", system-ui, sans-serif;
-      letter-spacing: 0.08em;
-      background: #ffd400;
-      padding: 0.35rem 0.9rem;
-      border: 2px solid #111;
-    }
 
     main {
       max-width: 42rem;
-      padding: 4.5rem 2rem 2rem;
+      padding: 2rem;
     }
 
     .logo {
@@ -170,7 +138,6 @@
 </head>
 
 <body>
-  <div id="hazardStrip"><span>PRE-RELEASE / TEST BUILD</span></div>
   <main>
     <img class="logo" src="/logo.svg" alt="WebKit Autoloader" />
     <h1>WebKit Autoloader Installer</h1>
@@ -211,7 +178,7 @@
 
       function setCaching() {
         statusEl.textContent = 'Caching content...';
-        detailEl.textContent = 'Please wait a moment.';
+        detailEl.textContent = 'Please wait a moment. Do not close this page yet!';
         progressWrap.hidden = false;
       }
 
