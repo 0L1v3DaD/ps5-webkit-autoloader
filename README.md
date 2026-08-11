@@ -3,7 +3,12 @@
 </p>
 <h1 align="center">PS5 WebKit Autoloader</h1>
 &nbsp;
-<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br><b>Pre-alpha:</b> supports firmwares <b>9.00&ndash;12.00</b>.</p>
+<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>9.00&ndash;12.00</b>.</p>
+
+> [!NOTE]
+> Uses an early release of the WebKit exploit ([slopkit](https://github.com/jordyidk/slopkit)). It might not be stable, and on some firmwares it might be more stable than others.
+>
+> It might not be suitable for everyday usage yet.
 
 > [!WARNING]
 > **PRE-RELEASE / TEST BUILD — your feedback is needed**
@@ -51,7 +56,7 @@ There are two ways to set up the autoloader, depending on whether you're already
 
 ### ⚙️ Not jailbroken yet
 
-This is the classic WebKit way of getting in, but served from your own PC instead of a third-party DNS host:
+If you aren't jailbroken yet, you'll need to host the exploit locally on your PC for the initial setup:
 
 1. Download `webkit-autoloader-host.py` (or the Windows `.exe`) from the [Releases](https://github.com/itsPLK/ps5-webkit-autoloader/releases) page.
 2. Run it on a PC on the same network as your PS5.
@@ -93,11 +98,9 @@ For a fixed, automated payload chain, you can configure payloads manually:
 <Details>
 <Summary><i>How to update the autoloader?</i></Summary>
 
-The autoloader content is cached on the console, so updates are just as simple as the initial install:
-1. Re-run the latest `webkit-autoloader-installer_vX.Y.Z.elf` from the [Releases](https://github.com/itsPLK/ps5-webkit-autoloader/releases) page.
-2. The installer updates the homescreen app and refreshes the cached page.
+The autoloader content is cached on the console, so updating is exactly the same as the initial install. Simply follow the **[Setup Instructions](#setup-instructions)** using the new release files. 
 
-Your payloads and `autoload.txt` on USB / internal storage are never touched.
+The latest installer payload will re-create the homescreen app and refresh the cached page for you. Your payloads and `autoload.txt` on USB / internal storage are never touched.
 </Details>
 
 <Details>
@@ -123,66 +126,17 @@ ftpsrv.elf
 
 ---
 
----
+## For developers
 
-## Development: slopkit submodule + patch workflow
-
-The WebKit exploit chain is [slopkit](https://github.com/jordyidk/slopkit), pinned as a
-git submodule at `third_party/slopkit/`. It is kept **pristine** — no commits are ever
-made inside it. The build copies it to the gitignored `frontend/autoloader/slopkit/`
-and applies all of our integration changes from `tools/slopkit-autoload.patch` there
-(see `tools/apply_slopkit_patch.sh`). The Makefile runs this automatically
-(`slopkit-prepare`) before every build, host build and dev server run.
-
-### First-time setup
-
-```bash
-git submodule update --init --recursive
-make dev       # copies + patches slopkit automatically, then serves the frontend
-```
-
-### Updating slopkit
-
-```bash
-git submodule update --remote third_party/slopkit
-tools/apply_slopkit_patch.sh     # re-applies our patch on top of the new code
-```
-
-If the patch no longer applies cleanly (slopkit changed the files we touch),
-the script prints the exact command to regenerate it:
-
-```bash
-git -C third_party/slopkit diff > tools/slopkit-autoload.patch
-```
-
-### What the patch does
-
-All changes are additive, in `slopkit/slopkit/poops.html`:
-
-- Adds an `?autoload=<name>` query param. When present, after the exploit chain
-  finishes and elfldr is up, slopkit waits 4 s (for elfldr to start accepting
-  connections on port 9021) and then auto-sends the payload from
-  `../../payloads/<name>` — i.e. our own `frontend/autoloader/payloads/`, keeping
-  the submodule pristine.
-- Adds the payload to the menu list (hidden tile) so `payloadIsListed()` passes.
-- Raises `PAYLOAD_MAX_SIZE` to 4 MiB (the bundled `payload.elf`
-  is ~2.5 MiB, larger than slopkit's 2 MiB default).
-- Posts `{type:"wkal", kind:"autoload", ok, bytes}` to the parent page, which
-  the autoloader UI listens for.
-
-The `payload.elf` payload is downloaded from the
-`third_party/ps5-unified-autoloader` submodule's pinned GitHub release by
-`scripts/download_deps.sh` (run automatically as the Makefile's `payload-deps`
-target) and copied into `frontend/autoloader/payloads/`. It is never rebuilt
-locally — bump the submodule to pick up a newer release.
-
-📚 **For a deep dive into how the native installer and the PC Host work under the hood, check out [ARCHITECTURE.md](ARCHITECTURE.md).**
+The exploit chain integration, the slopkit submodule + patch workflow, payload download and
+the internals of the native installer and PC Host are all documented in
+**[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ## Credits
 
 * **[jordyidk](https://github.com/jordyidk)** — [slopkit](https://github.com/jordyidk/slopkit), the WebKit/kernel exploit chain used by this autoloader (slopkit credits its own contributors in its README; note it ships **without an explicit license**)
 * **[john-tornblom](https://github.com/john-tornblom)** — [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk/)
-* **[Mark Adler](https://github.com/madler)** — [puff.c](https://github.com/madler/zlib/tree/master/contrib/puff) (public domain)
+* **[Mark Adler](https://github.com/madler)** — [puff.c](https://github.com/madler/zlib/tree/master/contrib/puff) (used to decompress embedded frontend files)
 * Everyone else contributing to the PS5 homebrew scene.
 
 ## Disclaimer

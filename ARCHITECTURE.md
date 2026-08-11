@@ -3,13 +3,28 @@
 This document is designed to give developers a comprehensive overview of how the **PS5 WebKit Autoloader (WKAL)** project is structured, its goals, and how its various components interact.
 
 ## Core Purpose
-The goal of this project is to provide a reliable, persistent, and visually polished entry point for PS5 payloads (specifically targeting WebKit exploits). 
+The goal of this project is to provide a reliable, persistent, and visually polished entry point
+for PS5 payloads (specifically targeting WebKit exploits).
 
-Because the PS5 browser is locked down, users typically have to navigate through network settings to trigger an exploit host. This project solves that by offering **two distinct methods** for launching the autoloader:
-1. **The Native App (ELF Installer)**: A permanent homescreen shortcut (`WKAL00001`) that runs offline via the browser's AppCache.
-2. **The PC Host (Spoofing Script)**: A zero-dependency script run on a PC that spoofs the PlayStation User's Guide to serve the exact same payload over the network.
+Because the PS5 browser is locked down, WebKit exploits are normally triggered by pointing the
+console's DNS at an exploit host and opening the PlayStation User's Guide. This project removes
+that daily step, and it can be set up in one of two ways depending on whether the console is
+already jailbroken:
 
-Both methods ultimately serve the exact same frontend payload (`frontend/autoloader/`), ensuring a unified experience.
+1. **Already jailbroken — load the installer ELF.** Send `webkit-autoloader-installer_v*.elf` to
+   the console (elfldr or Payload Manager). It creates the permanent `WKAL00001` homescreen
+   shortcut and caches the frontend via the browser's AppCache.
+2. **Not jailbroken yet — use the PC Host.** Run the host script on a PC (a single self-contained
+   Python 3 script — no pip packages — or the Windows `.exe` built by GitHub Actions; `openssl`
+   is required at runtime for the HTTPS certificate), point the PS5's DNS at it, and open the
+   User's Guide. It spoofs `manuals.playstation.net` (DNS + self-signed HTTPS), serves the same
+   frontend, runs the WebKit exploit, and loads the **installer ELF** automatically.
+
+Both paths end at the same place: the **WebKit Autoloader** homescreen app, which from then on
+runs fully offline — it runs the exploit chain and autoloads the real `payload.elf`
+(unified-autoloader). Both paths embed the identical `frontend/autoloader/` UI; only the loaded
+payload differs — the installer ELF during setup, the unified-autoloader payload from the
+homescreen.
 
 ---
 
@@ -19,7 +34,7 @@ This is the core WebKit Autoloader UI. It contains the HTML, CSS, and JS that th
 - The page is a loader shell: a startup splash (logo + title, animated out after ~1.5s), a monospace log terminal, a progress bar, and a bottom-centered footer with the version/build-time and an open-source notice.
 - The exploit itself runs in a same-origin **iframe** (`#exploit`, visible bottom-right for debugging) pointing at slopkit's `poops.html` with an `?autoload=<payload>` query param (see [slopkit integration](#6-slopkit-integration-and-the-patch-workflow)). `app.js` mirrors slopkit's live screen (`#scr`), stage (`#stage`), early log (`#early`) and summary (`#summary`) into the log terminal, so the UI shows exactly what the chain is doing — plus the `?autoload` result posted back via `postMessage`.
 - `index.html` carries the full build version both in its `<title>` and in the visible `<footer>` via the `[[VERSION_PLACEHOLDER]]`/`[[BUILD_TIME_PLACEHOLDER]]` tokens (replaced at build time — see [Versioning](#5-versioning)).
-- A full-screen `#testGate` overlay (test-build builds only) shows the "THIS IS A TEST BUILD / UNTESTED, MAY NOT WORK" banner with a Discord QR invite. The exploit only starts after the user presses **Continue** and the splash has fully faded out — `app.js` sets the iframe `src` only then, and the log mirror stays inert until the gate is accepted (`chainStarted`).
+- A full-screen `#testGate` overlay (test-build builds only) shows the "THIS IS A TEST BUILD / UNTESTED, MAY NOT WORK" banner with a GitHub Discussions QR invite. The exploit only starts after the user presses **Continue** and the splash has fully faded out — `app.js` sets the iframe `src` only then, and the log mirror stays inert until the gate is accepted (`chainStarted`).
 - **Important**: It does *not* contain caching logic itself. Caching is handled exclusively by the ELF's wrapper page (`installer-page`).
 
 ---
@@ -83,6 +98,13 @@ The WebKit exploit chain is [slopkit](https://github.com/jordyidk/slopkit), pinn
 submodule at `third_party/slopkit/`. It is **never modified in place**. All of our integration
 changes live in `tools/slopkit-autoload.patch`, which is applied to a throwaway copy.
 
+### First-time setup
+
+```bash
+git submodule update --init --recursive
+make dev       # copies + patches slopkit automatically, then serves the frontend
+```
+
 ### The copy + patch pipeline (`tools/apply_slopkit_patch.sh`)
 
 The build needs slopkit under `frontend/autoloader/slopkit/` (gitignored — see `.gitignore`).
@@ -112,6 +134,15 @@ tools/apply_slopkit_patch.sh     # re-applies the patch; errors if upstream chan
 ```
 
 If the patch no longer applies, regenerate it with `git -C third_party/slopkit diff > tools/slopkit-autoload.patch`.
+
+### Bundled payload (`scripts/download_deps.sh`)
+
+The bundled payload (`frontend/autoloader/payloads/payload.elf`) is the `ps5-unified-autoloader`
+ELF used by the homescreen flow. It is not rebuilt locally — it is downloaded from the
+`third_party/ps5-unified-autoloader` submodule's pinned GitHub release by
+`scripts/download_deps.sh` (run automatically as the Makefile's `payload-deps` target before
+staging, host builds and `make dev`), sha256-verified against the release digest, and cached in
+a `.sha256` sidecar so offline rebuilds work. Bump the submodule to pick up a newer release.
 
 ---
 
