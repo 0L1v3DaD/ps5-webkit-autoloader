@@ -301,9 +301,9 @@
     }
   }
 
-  /* Mirror umtx2's live #console log (#console .line) from the same-origin
-     exploit iframe into our own log view, mapping its LOG-* severity classes
-     onto ours. */
+  /* Mirror umtx2's live #console log (#console > div, classed LOG-*) from the
+     same-origin exploit iframe into our own log view, mapping its severity
+     classes onto ours. */
   var umtx2MirroredLines = 0;
   function mirrorUmtx2() {
     var doc;
@@ -313,7 +313,7 @@
       return;
     }
     if (!doc || !chainStarted) return;
-    var lines = doc.querySelectorAll('#console .line');
+    var lines = doc.querySelectorAll('#console > div');
     if (lines.length < umtx2MirroredLines) {
       umtx2MirroredLines = lines.length;
     }
