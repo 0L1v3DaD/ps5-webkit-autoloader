@@ -103,11 +103,9 @@ def build_zip(frontend_dir, overrides_dir, version, build_time, payload_path=Non
 
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for rel in sorted(file_map.keys()):
-            if rel in ("index.html", "slopkit/slopkit/poops.html"):
+            if rel == "index.html":
                 # The autoloader carries version/build-time placeholders in its
-                # title and the restyled slopkit page shows them in its footer.
-                # The PC host serves them at the docroot /app/, so replace the
-                # tokens here.
+                # title — the PC host serves it at the docroot, so replace them here.
                 with open(file_map[rel], "rb") as f:
                     data = f.read()
                 data = data.replace(VERSION_TOKEN, version.encode("utf-8"))

@@ -69,9 +69,6 @@ fi
 #    big cat gif must be gone. Catches a silently truncated/empty patch.
 if ! grep -q 'autoload: Q.get("autoload")' slopkit/poops.html \
     || ! grep -q 'PAYLOAD_MAX_SIZE = 0x400000' slopkit/poops.html \
-    || ! grep -q 'WKAL temporary no-iframe overlay' slopkit/poops.html \
-    || ! grep -q '<footer id="footer">' slopkit/poops.html \
-    || ! grep -q '<title>WebKit Autoloader v' slopkit/poops.html \
     || [ -f slopkit/mmhmm-cats-ps5.gif ]; then
     echo "Error: slopkit patch verification FAILED — integration markers missing."
     echo "tools/slopkit-autoload.patch is incomplete or out of date."
@@ -79,4 +76,4 @@ if ! grep -q 'autoload: Q.get("autoload")' slopkit/poops.html \
     echo "  git -C $SOURCE diff > $PATCH"
     exit 1
 fi
-echo "slopkit: patch verification OK (autoload, 4 MiB limit, no-iframe overlay, cat gif removed)."
+echo "slopkit: patch verification OK (autoload, 4 MiB limit, cat gif removed)."
