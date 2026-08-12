@@ -42,11 +42,31 @@
     } catch (e) { }
   }
 
+  /* Build-time exploit override: "auto" (firmware table), "umtx2" or
+     "slopkit". Replaced by tools/gen_file_registry.py / build_host.py /
+     dev_server.py from the FORCE_EXPLOIT env (default "auto"); left as the
+     raw placeholder when served straight from source -> auto. A ?force= query
+     on this page overrides it at runtime (handy for make dev). */
+  var EXPLOIT_MODE = '[[EXPLOIT_MODE]]';
+  if (EXPLOIT_MODE.indexOf('[[') === 0) EXPLOIT_MODE = 'auto';
+
+  /* Firmwares supported by each exploit, keyed on the exact UA firmware
+     string (/PlayStation 5/x.xx/). Keep in sync with the exploits' own lists:
+     umtx2/document/en/ps5/main.js and slopkit/slopkit/main.js. */
+  var UMTX2_FIRMWARES = ["1.00", "1.01", "1.02", "1.05", "1.10", "1.11", "1.12", "1.13", "1.14", "2.00", "2.20", "2.25", "2.26", "2.30", "2.50", "2.70", "3.00", "3.10", "3.20", "3.21", "4.00", "4.02", "4.03", "4.50", "4.51", "5.00", "5.02", "5.10", "5.50"];
+  var SLOPKIT_FIRMWARES = ["9.00", "9.05", "9.20", "9.40", "9.60", "10.00", "10.01", "10.20", "10.40", "10.60", "11.00", "11.20", "11.40", "11.60", "12.00"];
+
+  var UMTX2_URL =
+    'umtx2/index.html?autoload=payload.elf&v=1';
+
   /* Keep in sync with EXPLOIT_IFRAME_URL in tools/gen_file_registry.py — the
      AppCache manifest lists this exact URL so the console can serve it
      offline (AppCache matches URLs including the query string). */
-  var EXPLOIT_URL =
+  var SLOPKIT_URL =
     'slopkit/slopkit/poops.html?go=1&auto=1&production=1&trigger=netcontrol&attempts=8&only=ps0_preflight,ps1_prepare,ps3_stage0,ps4_validate,ps5_stage1,ps6_stage2,ps8_stage3,ps9_stage4,ps10_stage5&log=debug&payload=1&autoload=payload.elf&v=41';
+
+  var EXPLOIT_URL = '';
+  var exploitMode = null;
 
   function uiLog(message, type) {
     type = type || 'info';
@@ -70,6 +90,42 @@
 
   window.uiLog = uiLog;
   window.updateProgress = updateProgress;
+
+  function detectFirmware() {
+    var m = /PlayStation 5\/(\d+\.\d+)/.exec(navigator.userAgent);
+    if (!m) return null;
+    return { str: m[1], num: parseFloat(m[1]) };
+  }
+
+  /* Choose which exploit to arm. Forced modes (build-time EXPLOIT_MODE or a
+     ?force= query on this page) bypass the firmware table so a specific chain
+     can be exercised on any firmware — the exploit page's own firmware guard
+     still applies. Returns 'umtx2' | 'slopkit' | null. */
+  function pickExploit() {
+    var fw = detectFirmware();
+    var forced = null;
+    try {
+      var q = new URLSearchParams(window.location.search).get('force');
+      if (q === 'umtx2' || q === 'slopkit') forced = q;
+    } catch (e) { }
+    if (forced) {
+      uiLog('[force] using ' + forced + ' on firmware ' + (fw ? fw.str : 'unknown'), 'warning');
+      return forced;
+    }
+    if (EXPLOIT_MODE === 'umtx2' || EXPLOIT_MODE === 'slopkit') {
+      uiLog('[force] using ' + EXPLOIT_MODE + ' on firmware ' + (fw ? fw.str : 'unknown'), 'warning');
+      return EXPLOIT_MODE;
+    }
+    if (!fw) {
+      uiLog('[ERROR] Not a PlayStation 5 browser.', 'error');
+      return null;
+    }
+    if (UMTX2_FIRMWARES.indexOf(fw.str) !== -1) return 'umtx2';
+    if (SLOPKIT_FIRMWARES.indexOf(fw.str) !== -1) return 'slopkit';
+    uiLog('[ERROR] Unsupported firmware ' + fw.str +
+      ' (supported: 1.00-5.50 via umtx2, 9.00-12.00 via slopkit).', 'error');
+    return null;
+  }
 
   function revealExploit() {
     splashEl.classList.add('hide');
@@ -245,9 +301,57 @@
     }
   }
 
+  /* Mirror umtx2's live #console log (#console .line) from the same-origin
+     exploit iframe into our own log view, mapping its LOG-* severity classes
+     onto ours. */
+  var umtx2MirroredLines = 0;
+  function mirrorUmtx2() {
+    var doc;
+    try {
+      doc = exploitEl.contentDocument;
+    } catch (e) {
+      return;
+    }
+    if (!doc || !chainStarted) return;
+    var lines = doc.querySelectorAll('#console .line');
+    if (lines.length < umtx2MirroredLines) {
+      umtx2MirroredLines = lines.length;
+    }
+    for (; umtx2MirroredLines < lines.length; umtx2MirroredLines++) {
+      var el = lines[umtx2MirroredLines];
+      var text = (el.textContent || '').trim();
+      if (!text) continue;
+      var cls = el.className || '';
+      if (/LOG-ERROR/.test(cls)) {
+        uiLog('[umtx2] ' + text, 'error');
+      } else if (/LOG-WARN/.test(cls)) {
+        uiLog('[umtx2] ' + text, 'warning');
+      } else if (/LOG-SUCCESS/.test(cls)) {
+        uiLog('[umtx2] ' + text, 'success');
+      } else {
+        uiLog('[umtx2] ' + text, 'info');
+      }
+    }
+  }
+
+  function mirrorExploit() {
+    if (exploitMode === 'umtx2') {
+      mirrorUmtx2();
+      return;
+    }
+    mirrorSlopkit();
+  }
+
   function start() {
     uiLog('WebKit Autoloader by PLK', 'success');
     updateProgress(0, 'Waiting to start...');
+
+    /* Always hand off from the splash to the loader view, synchronously: the
+       exploit iframe can raise blocking dialogs (e.g. umtx2's unsupported-
+       firmware alert in a forced build), which would freeze a delayed reveal
+       on the splash forever. The splash still fades out via its own CSS
+       transition. */
+    revealExploit();
 
     window.addEventListener('message', function (event) {
       var data = event.data;
@@ -262,17 +366,32 @@
        are already handled by the URL-diff branch in mirrorSlopkit() plus
        the shrink re-anchor (fresh documents start with an empty screen,
        so their lines stream normally). */
-    setInterval(mirrorSlopkit, 500);
+    setInterval(mirrorExploit, 500);
+
+    var picked = pickExploit();
+    if (!picked) {
+      updateProgress(0, 'Unsupported firmware.');
+      return;
+    }
+    exploitMode = picked;
+    EXPLOIT_URL = picked === 'umtx2' ? UMTX2_URL : SLOPKIT_URL;
+
+    /* umtx2 auto-runs its chain on load when sessionStorage 'on_load_autorun'
+       is set (it clears it itself once main() starts); clear it on the
+       slopkit path so a stale key never re-triggers it. */
+    try {
+      if (picked === 'umtx2') {
+        sessionStorage.setItem('on_load_autorun', 'kernel');
+      } else {
+        sessionStorage.removeItem('on_load_autorun');
+      }
+    } catch (e) { }
 
     chainStarted = true;
     clearSlopkitState();
     try {
       exploitEl.src = EXPLOIT_URL;
     } catch (e) { }
-
-    setTimeout(function () {
-      revealExploit();
-    }, 1500);
   }
 
   window.addEventListener('load', start);

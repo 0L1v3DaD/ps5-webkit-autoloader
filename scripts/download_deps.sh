@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
-# Download the ps5-unified-autoloader payload ELF from its GitHub release,
-# pinned to the version of the third_party/ps5-unified-autoloader submodule.
+# Download the shared ps5-elfldr ELF and the ps5-unified-autoloader payload
+# ELF from their GitHub releases, pinned to the third_party/ submodules.
 #
-# The payload is the "bundled" ELF embedded in the installer: after install,
-# the homescreen app runs the exploit chain and autoloads it from the local
-# AppCache. It is not rebuilt here — it ships as a prebuilt release asset of
-# itsPLK/ps5-unified-autoloader (same approach as ps5-y2jb-autoloader's
-# scripts/download_deps.sh), but pinned to the submodule commit so builds are
-# reproducible: bump the submodule to bump the payload.
+#   third_party/ps5-elfldr             -> frontend/autoloader/shared/elfldr-ps5.elf
+#   third_party/ps5-unified-autoloader -> frontend/autoloader/payloads/payload.elf
 #
-# Idempotent: skips when the payload already exists and its sha256 matches
-# the release digest. The Makefile runs this automatically (payload-deps)
-# before staging the frontend and building the PC host.
+# The shared elfldr is a single ELF used by every exploit chain (umtx2, slopkit,
+# and anything that comes later). The unified-autoloader payload is the
+# "bundled" ELF embedded in the installer: after install, the homescreen app
+# runs the exploit chain and autoloads it from the local AppCache.
+#
+# Neither is rebuilt here — both ship as prebuilt release assets (same approach
+# as ps5-y2jb-autoloader's scripts/download_deps.sh), pinned to the submodule
+# commits so builds are reproducible: bump the submodule to bump the payload.
+#
+# The elfldr tag is pinned explicitly (not via git describe) because ps5-elfldr
+# tags multiple builds against one commit and describe picks an older tag; keep
+# ELFLDR_TAG in sync when bumping third_party/ps5-elfldr.
+#
+# Idempotent: skips assets that already exist and match their cached sha256.
+# The Makefile runs this automatically (payload-deps) before staging the
+# frontend and building the PC host.
 #
 # Uses only python3 (a build dependency already) — no curl required, so it
 # also runs inside the Docker SDK image.
@@ -19,22 +28,23 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SUBMODULE="$ROOT/third_party/ps5-unified-autoloader"
-DEST_DIR="$ROOT/frontend/autoloader/payloads"
-DEST="$DEST_DIR/payload.elf"
-REPO="itsPLK/ps5-unified-autoloader"
 
-if [ ! -e "$SUBMODULE/.git" ]; then
-    echo "Error: ps5-unified-autoloader submodule is not initialised."
-    echo "Run: git submodule update --init --recursive"
-    exit 1
-fi
+# Shared elfldr (same ELF across all exploit chains)
+ELFLDR_SUBMODULE="$ROOT/third_party/ps5-elfldr"
+ELFLDR_REPO="itsPLK/ps5-elfldr"
+ELFLDR_TAG="v0.24-148b71c"
+ELFLDR_DEST="$ROOT/frontend/autoloader/shared/elfldr-ps5.elf"
 
-TAG=$(git -C "$SUBMODULE" describe --tags --always)
+# Bundled autoload payload
+PAYLOAD_SUBMODULE="$ROOT/third_party/ps5-unified-autoloader"
+PAYLOAD_REPO="itsPLK/ps5-unified-autoloader"
+PAYLOAD_DEST="$ROOT/frontend/autoloader/payloads/payload.elf"
 
 # Fetch the pinned release, verify the payload, and download it if needed.
-# Exit codes: 0 = payload ready, 3 = payload already present and verified.
-python3 - "$REPO" "$TAG" "$DEST" <<'PY'
+# Exit codes: 0 = asset ready, 3 = already present and verified.
+download_release() {
+    local repo="$1" tag="$2" dest="$3"
+    python3 - "$repo" "$tag" "$dest" <<'PY'
 import hashlib
 import json
 import os
@@ -51,7 +61,7 @@ def sha256_of(path):
             h.update(chunk)
     return h.hexdigest()
 
-# Offline fast path: payload + sidecar from a previous successful run.
+# Offline fast path: asset + sidecar from a previous successful run.
 if os.path.isfile(dest) and os.path.isfile(sidecar):
     with open(sidecar) as f:
         try:
@@ -59,9 +69,9 @@ if os.path.isfile(dest) and os.path.isfile(sidecar):
         except ValueError:
             st_tag, st_hash = "", ""
     if st_tag == tag and sha256_of(dest) == st_hash:
-        print(f"ps5-unified-autoloader payload already present and verified ({tag}).")
+        print(f"{os.path.basename(dest)} already present and verified ({tag}).")
         sys.exit(0)
-    print("Existing payload does not match the pinned release - re-checking...")
+    print("Existing asset does not match the pinned release - re-checking...")
 
 def fetch(url):
     req = urllib.request.Request(url, headers={"User-Agent": "ps5-webkit-autoloader-build"})
@@ -90,7 +100,7 @@ digest = digest.split(":", 1)[-1] if ":" in digest else digest
 if os.path.isfile(dest) and digest and sha256_of(dest) == digest:
     with open(sidecar, "w") as f:
         f.write(f"{tag} {digest}\n")
-    print(f"ps5-unified-autoloader payload already present and verified ({tag}).")
+    print(f"{os.path.basename(dest)} already present and verified ({tag}).")
     sys.exit(0)
 
 url = asset["browser_download_url"]
@@ -117,5 +127,23 @@ if digest:
 os.replace(tmp, dest)
 with open(sidecar, "w") as f:
     f.write(f"{tag} {digest}\n")
-print(f"ps5-unified-autoloader payload ready ({tag}): {dest}")
+print(f"{os.path.basename(dest)} ready ({tag}): {dest}")
 PY
+}
+
+if [ ! -e "$ELFLDR_SUBMODULE/.git" ]; then
+    echo "Error: ps5-elfldr submodule is not initialised."
+    echo "Run: git submodule update --init --recursive"
+    exit 1
+fi
+
+if [ ! -e "$PAYLOAD_SUBMODULE/.git" ]; then
+    echo "Error: ps5-unified-autoloader submodule is not initialised."
+    echo "Run: git submodule update --init --recursive"
+    exit 1
+fi
+
+PAYLOAD_TAG=$(git -C "$PAYLOAD_SUBMODULE" describe --tags --always)
+
+download_release "$ELFLDR_REPO" "$ELFLDR_TAG" "$ELFLDR_DEST"
+download_release "$PAYLOAD_REPO" "$PAYLOAD_TAG" "$PAYLOAD_DEST"

@@ -106,3 +106,20 @@ index eb01cd36a41d68cc74a2ca6e60643c2e33770cd4..ff8aaff17f7268088cc9b7b63cb5dd12
      }
  }
  
+diff --git a/slopkit/poops.js b/slopkit/poops.js
+index 5dda36fd635c4b871f0f2cc6700f2b4241396237..7ad9d01b7320003888abc7b72d53b05058f53369 100644
+--- a/slopkit/poops.js
++++ b/slopkit/poops.js
+@@ -7834,9 +7834,9 @@ export function makePoopsEngine(X) {
+     flushMark("STAGE5-FETCH-BIN-OK", "bytes=" + binBytes.length);
+ 
+     try {
+-      const name = o.elfName || "elfldr-ps5-1360.elf";
+-      flushMark("STAGE5-ELF-FETCH-PRE", "url=../payloads/" + name);
+-      const response = await fetch("../payloads/" + name, {
++      const name = o.elfName || "elfldr-ps5.elf";
++      flushMark("STAGE5-ELF-FETCH-PRE", "url=../../shared/" + name);
++      const response = await fetch("../../shared/" + name, {
+         cache: "no-store",
+       });
+       if (!response.ok)

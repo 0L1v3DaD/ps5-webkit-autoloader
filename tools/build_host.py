@@ -43,18 +43,22 @@ def repo_root():
 
 
 # slopkit's bundled payload menu servers (ftpsrv, gdbsrv, kstuff, ...) are
-# never used by the autoloader — only elfldr + the kexp it boots are needed.
-# The copied slopkit is a throwaway git repo (tools/apply_slopkit_patch.sh),
-# so .git must never be embedded. The payload digest sidecar
-# (payloads/*.sha256) is build-time bookkeeping and must never be served.
+# never used by the autoloader — only the kexp it boots is needed (the elfldr
+# is shared from /app/shared/, see scripts/download_deps.sh). umtx2's bundled
+# payloads are unused too. The copied slopkit/umtx2 are throwaway git repos
+# (tools/apply_*_patch.sh), so .git must never be embedded. The payload digest
+# sidecars (payloads/*.sha256) are build-time bookkeeping and must never be
+# served.
 def include_in_zip(rel):
     if "/.git/" in rel or rel.endswith("/.git"):
         return False
     if rel.startswith("slopkit/payloads/"):
-        return rel.endswith(("elfldr-ps5-1360.elf", "kexp_2026_05_25.bin"))
+        return rel.endswith("kexp_2026_05_25.bin")
+    if rel.startswith("umtx2/payloads/"):
+        return False
     if rel == "slopkit/readme.png":
         return False
-    if rel.startswith("payloads/") and rel.endswith(".sha256"):
+    if rel.endswith(".sha256"):
         return False
     return True
 
@@ -110,6 +114,14 @@ def build_zip(frontend_dir, overrides_dir, version, build_time, payload_path=Non
                     data = f.read()
                 data = data.replace(VERSION_TOKEN, version.encode("utf-8"))
                 data = data.replace(BUILD_TIME_TOKEN, build_time.encode("utf-8"))
+                zf.writestr(rel, data)
+            elif rel == "app.js":
+                # Build-time exploit override (auto | umtx2 | slopkit), from the
+                # FORCE_EXPLOIT env — same token as the ELF build.
+                with open(file_map[rel], "rb") as f:
+                    data = f.read()
+                mode = os.environ.get("FORCE_EXPLOIT", "auto")
+                data = data.replace(b"[[EXPLOIT_MODE]]", mode.encode("utf-8"))
                 zf.writestr(rel, data)
             else:
                 zf.write(file_map[rel], arcname=rel)

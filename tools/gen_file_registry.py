@@ -53,29 +53,39 @@ def detect_content_type(path):
 
 # slopkit ships its own payload menu servers (ftpsrv, gdbsrv, kstuff, ...) that
 # our autoloader never uses — the chain only needs the elfldr it boots and the
-# kexp shellcode that loads it. Skipping the rest keeps the installer ELF ~6 MB
-# smaller. readme.png is a slopkit repo asset, also unused. The copied slopkit
-# is a throwaway git repo (tools/apply_slopkit_patch.sh), so .git must never
-# be embedded. The payload digest sidecar (payloads/*.sha256) is build-time
-# bookkeeping and must never be served.
+# kexp shellcode that loads it. The elfldr is now shared (served from
+# /app/shared/elfldr-ps5.elf, see scripts/download_deps.sh), so only the kexp is
+# kept. umtx2's bundled payloads are unused too (the autoload payload comes
+# from /app/payloads/ and the shared elfldr from /app/shared/). readme.png is a
+# slopkit repo asset, also unused. The copied slopkit is a throwaway git repo
+# (tools/apply_slopkit_patch.sh), so .git must never be embedded. The payload
+# digest sidecars (payloads/*.sha256) are build-time bookkeeping and must never
+# be served.
 def include_in_registry(path):
     if "/.git/" in path or path.endswith("/.git"):
         return False
     if path.startswith("/app/slopkit/payloads/"):
-        return path.endswith(("elfldr-ps5-1360.elf", "kexp_2026_05_25.bin"))
+        return path.endswith("kexp_2026_05_25.bin")
+    if path.startswith("/app/umtx2/payloads/"):
+        return False
     if path == "/app/slopkit/readme.png":
         return False
-    if path.startswith("/app/payloads/") and path.endswith(".sha256"):
+    if path.endswith(".sha256"):
         return False
     return True
 
 
 VERSION_PLACEHOLDER = b"[[VERSION_PLACEHOLDER]]"
 BUILD_TIME_PLACEHOLDER = b"[[BUILD_TIME_PLACEHOLDER]]"
+EXPLOIT_MODE_PLACEHOLDER = b"[[EXPLOIT_MODE]]"
 
 # Files that carry the version/badge and get the placeholders replaced:
 # installer page at the dist root, and the autoloader app under /app/.
 VERSIONED_PATHS = ("/index.html", "/app/index.html")
+
+# The build-time exploit override in app.js (auto | umtx2 | slopkit). Defaults
+# to "auto" (firmware routing) unless FORCE_EXPLOIT is set.
+DEFAULT_EXPLOIT_MODE = "auto"
 
 
 def apply_version_placeholder(path, data, version, build_time):
@@ -83,6 +93,17 @@ def apply_version_placeholder(path, data, version, build_time):
     if path in VERSIONED_PATHS:
         data = data.replace(VERSION_PLACEHOLDER, version.encode("utf-8"))
         data = data.replace(BUILD_TIME_PLACEHOLDER, build_time.encode("utf-8"))
+    return data
+
+
+def apply_exploit_mode_placeholder(path, data):
+    """Replace the [[EXPLOIT_MODE]] token in app.js from the FORCE_EXPLOIT env."""
+    if path == "/app/app.js":
+        mode = os.environ.get("FORCE_EXPLOIT", DEFAULT_EXPLOIT_MODE)
+        if mode not in ("auto", "umtx2", "slopkit"):
+            print(f"Warning: unknown FORCE_EXPLOIT '{mode}' - using 'auto'.", file=sys.stderr)
+            mode = "auto"
+        data = data.replace(EXPLOIT_MODE_PLACEHOLDER, mode.encode("utf-8"))
     return data
 
 
@@ -111,7 +132,7 @@ def compress_entry(data):
 # The autoloader iframe loads poops.html with this exact query string. AppCache
 # matches URLs exactly (query included), so the manifest must list the full URL
 # or the console serves a fallback document instead of the exploit page.
-# Keep in sync with EXPLOIT_URL in frontend/autoloader/app.js.
+# Keep in sync with SLOPKIT_URL in frontend/autoloader/app.js.
 EXPLOIT_IFRAME_URL = (
     "/app/slopkit/slopkit/poops.html"
     "?go=1&auto=1&production=1&trigger=netcontrol&attempts=8"
@@ -119,6 +140,12 @@ EXPLOIT_IFRAME_URL = (
     ",ps5_stage1,ps6_stage2,ps8_stage3,ps9_stage4,ps10_stage5"
     "&log=debug&payload=1&autoload=payload.elf&v=41"
 )
+
+# umtx2 auto-runs its chain on load via the 'on_load_autorun' sessionStorage
+# key set by app.js; the URL carries the autoload payload name + a cache-bust
+# that must be bumped together with the umtx2 patch (tools/umtx2-autoload.patch).
+# Keep in sync with UMTX2_URL in frontend/autoloader/app.js.
+UMTX2_IFRAME_URL = "/app/umtx2/index.html?autoload=payload.elf&v=1"
 
 # slopkit references its own scripts with cache-busting query strings
 # (e.g. "./core.js?v=10", "main.js?v=19", "../offsets/9.00.js?v=19").
@@ -161,6 +188,7 @@ def build_manifest(files, version, build_time):
     ]
     lines += [path for path, _ in files]
     lines.append(EXPLOIT_IFRAME_URL)
+    lines.append(UMTX2_IFRAME_URL)
     lines += collect_cachebust_urls(files)
     lines += [
         "",
@@ -258,6 +286,7 @@ def main():
             with open(full, "rb") as f:
                 data = f.read()
             data = apply_version_placeholder(path, data, version_info["full"], version_info["build_time"])
+            data = apply_exploit_mode_placeholder(path, data)
             stored, compressed = compress_entry(data)
             emit_c_array(out, f"file_{i}", stored)
             out.write("\n")

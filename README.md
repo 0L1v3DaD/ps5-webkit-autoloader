@@ -3,10 +3,14 @@
 </p>
 <h1 align="center">PS5 WebKit Autoloader</h1>
 &nbsp;
-<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>9.00&ndash;12.00</b>.</p>
+<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>1.00&ndash;5.50</b> (umtx2) and <b>9.00&ndash;12.00</b> (slopkit).</p>
 
 > [!NOTE]
-> Uses an early release of the [slopkit](https://github.com/jordyidk/slopkit) WebKit exploit under the hood with minimal changes (via a [patch file](https://github.com/itsPLK/ps5-webkit-autoloader/blob/main/tools/slopkit-autoload.patch)), so it should have the same stability as the original. Keep in mind that reliability can vary across firmwares, and it may not be suitable for everyday usage yet.
+> Uses the [umtx2](https://github.com/idlesauce/umtx2) WebKit exploit (FW 1.00–5.50) and an early
+> release of the [slopkit](https://github.com/jordyidk/slopkit) WebKit exploit (FW 9.00–12.00)
+> under the hood, each with minimal changes (via their patch files in `tools/`), so stability
+> should match the originals. Keep in mind that reliability can vary across firmwares, and it may
+> not be suitable for everyday usage yet.
 
 <p align="center">
     <b>Other Autoloaders:</b><br>
@@ -90,10 +94,15 @@ The latest installer payload will re-create the homescreen app and refresh the c
 
 The technical internals and project architecture are documented in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
+To build the autoloader pointed at a specific exploit regardless of firmware (e.g. to test on an
+unsupported firmware), set `FORCE_EXPLOIT=umtx2` or `FORCE_EXPLOIT=slopkit` when building
+(`make dev`, `make host`, or `./build_release.sh`). The exploit's own firmware guard still applies.
+
 ## Credits
 
-* **[jordyidk](https://github.com/jordyidk)** & contributors — [slopkit](https://github.com/jordyidk/slopkit), the WebKit/kernel exploit chain used by this autoloader.
-* **[john-tornblom](https://github.com/john-tornblom)** — [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk/)
+* **[idlesauce](https://github.com/idlesauce)** & contributors — [umtx2](https://github.com/idlesauce/umtx2), the WebKit/kernel exploit chain used for firmware 1.00–5.50.
+* **[jordyidk](https://github.com/jordyidk)** & contributors — [slopkit](https://github.com/jordyidk/slopkit), the WebKit/kernel exploit chain used for firmware 9.00–12.00.
+* **[john-tornblom](https://github.com/john-tornblom)** — [ps5-payload-sdk](https://github.com/ps5-payload-dev/sdk/) and [elfldr](https://github.com/ps5-payload-dev/elfldr)
 * **[Mark Adler](https://github.com/madler)** — [puff.c](https://github.com/madler/zlib/tree/master/contrib/puff) (used to decompress embedded frontend files)
 * Everyone else contributing to the PS5 homebrew scene.
 

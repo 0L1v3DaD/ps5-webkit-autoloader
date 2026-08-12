@@ -79,15 +79,22 @@ slopkit-prepare:
 	@echo "Preparing slopkit copy..."
 	./tools/apply_slopkit_patch.sh
 
-# Fetch the bundled ps5-unified-autoloader payload ELF from its pinned GitHub
-# release (scripts/download_deps.sh). Idempotent: skips when the payload is
-# already present and verified, so offline rebuilds still work.
+# Copy third_party/umtx2/document/en/ps5 -> frontend/autoloader/umtx2 and apply
+# our patch. Same pattern as slopkit — pristine submodule, regenerated copy.
+.PHONY: umtx2-prepare
+umtx2-prepare:
+	@echo "Preparing umtx2 copy..."
+	./tools/apply_umtx2_patch.sh
+
+# Fetch the shared elfldr + the bundled ps5-unified-autoloader payload ELF from
+# their pinned GitHub releases (scripts/download_deps.sh). Idempotent: skips when
+# the binaries are already present and verified, so offline rebuilds still work.
 .PHONY: payload-deps
 payload-deps:
-	@echo "Fetching ps5-unified-autoloader payload..."
+	@echo "Fetching shared elfldr + unified-autoloader payload..."
 	./scripts/download_deps.sh
 
-$(FILE_REGISTRY_STAMP): $(FRONTEND_FILES) version icons slopkit-prepare payload-deps
+$(FILE_REGISTRY_STAMP): $(FRONTEND_FILES) version icons slopkit-prepare umtx2-prepare payload-deps
 	@echo "Staging frontend into $(FRONTEND_STAGE)/..."
 	rm -rf $(FRONTEND_STAGE)
 	mkdir -p $(FRONTEND_STAGE)/app
@@ -109,7 +116,7 @@ $(ELF): $(FILE_REGISTRY_H) $(FILE_REGISTRY_C) $(SRCS) $(ICON0)
 # versioned ELF it already built); it defaults to $(ELF).
 HOST_PAYLOAD ?= $(ELF)
 
-$(WKAL_HOST): $(WKAL_HOST_SOURCES) version icons $(HOST_PAYLOAD) slopkit-prepare payload-deps
+$(WKAL_HOST): $(WKAL_HOST_SOURCES) version icons $(HOST_PAYLOAD) slopkit-prepare umtx2-prepare payload-deps
 	@echo "Building $(WKAL_HOST) (embedding frontend/autoloader, overrides and the installer ELF)..."
 	$(PYTHON) tools/build_host.py --frontend $(FRONTEND_AUTOLOADER) --overrides pc-host/overrides --input pc-host/host.py --output $(WKAL_HOST) --payload $(HOST_PAYLOAD)
 
@@ -118,7 +125,7 @@ host: $(WKAL_HOST)
 # Serve the autoloader frontend locally (browser preview) with the same
 # /app/ path mapping and version tokens as the real build.
 .PHONY: dev
-dev: slopkit-prepare payload-deps
+dev: slopkit-prepare umtx2-prepare payload-deps
 	$(PYTHON) tools/dev_server.py
 
 clean:
@@ -126,4 +133,4 @@ clean:
 	rm -f $(ELF) $(FILE_REGISTRY_H) $(FILE_REGISTRY_C) $(FILE_REGISTRY_STAMP)
 	rm -f $(WKAL_HOST) $(VERSION_HEADER)
 
-.PHONY: all host dev clean slopkit-prepare payload-deps
+.PHONY: all host dev clean slopkit-prepare umtx2-prepare payload-deps

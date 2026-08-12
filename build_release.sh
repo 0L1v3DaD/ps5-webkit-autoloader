@@ -31,10 +31,10 @@ if [[ "$(docker images -q $IMAGE_NAME 2> /dev/null)" == "" ]]; then
 fi
 
 # 4. Build native ELF via Docker (generates icon assets + file registry as deps)
-#    Note: docker does NOT inherit the host environment, so BUILD_TYPE must be
-#    passed explicitly or the version header would be regenerated as "dev".
+#    Note: docker does NOT inherit the host environment, so BUILD_TYPE and
+#    FORCE_EXPLOIT must be passed explicitly or defaults ("dev"/"auto") apply.
 echo "[1/2] Building native ELF via Docker..."
-docker run --rm -u "$(id -u):$(id -g)" -e "BUILD_TYPE=${BUILD_TYPE:-dev}" -v "$(pwd)":/src -w /src $IMAGE_NAME make clean all
+docker run --rm -u "$(id -u):$(id -g)" -e "BUILD_TYPE=${BUILD_TYPE:-dev}" -e "FORCE_EXPLOIT=${FORCE_EXPLOIT:-auto}" -v "$(pwd)":/src -w /src $IMAGE_NAME make clean all
 
 if [ $? -ne 0 ]; then
     echo "      !!! ELF build FAILED!"
