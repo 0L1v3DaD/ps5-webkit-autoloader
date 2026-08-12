@@ -23,6 +23,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       full_version: ${{ steps.version.outputs.full_version }}
+      sha: ${{ steps.version.outputs.sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,6 +46,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "full_version=${FULL}" >> $GITHUB_OUTPUT
           echo "tag=v${FULL}" >> $GITHUB_OUTPUT
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Check if release exists
         env:
@@ -131,6 +133,7 @@ jobs:
           set -euo pipefail
           TAG="${{ needs.build-linux.outputs.tag }}"
           FULL="${{ needs.build-linux.outputs.full_version }}"
+          SHA="${{ needs.build-linux.outputs.sha }}"
           REPO="${{ github.repository }}"
 
           ELF="webkit-autoloader-installer_v${FULL}.elf"
@@ -164,6 +167,7 @@ jobs:
 
           gh release create "$TAG" \
             --prerelease \
+            --target "$SHA" \
             --title "$TAG (pre-release)" \
             --notes-file release_body.md \
             "$ELF" "$PY" "$EXE"
