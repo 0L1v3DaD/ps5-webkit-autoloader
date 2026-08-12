@@ -49,6 +49,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 import urllib.request
 
 repo, tag, dest = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -73,10 +74,34 @@ if os.path.isfile(dest) and os.path.isfile(sidecar):
         sys.exit(0)
     print("Existing asset does not match the pinned release - re-checking...")
 
-def fetch(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "ps5-webkit-autoloader-build"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return resp.read()
+def fetch(url, attempts=5):
+    """Fetch a URL, tolerating GitHub's flaky release CDN.
+
+    Two things break urllib against github.com release downloads:
+      - http.client adds `Accept-Encoding: identity` when unset, and the asset
+        CDN (release-assets.githubusercontent.com) deterministically drops those
+        connections. We send `gzip` and decompress by hand.
+      - The CDN also intermittently closes connections before responding, so we
+        retry with a short backoff.
+    """
+    import gzip
+
+    last = None
+    for i in range(attempts):
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "ps5-webkit-autoloader-build",
+            "Accept-Encoding": "gzip",
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = resp.read()
+                if resp.headers.get("Content-Encoding", "").lower() == "gzip":
+                    data = gzip.decompress(data)
+                return data
+        except Exception as exc:
+            last = exc
+            time.sleep(1 + i)
+    raise last
 
 try:
     release = json.loads(fetch(f"https://api.github.com/repos/{repo}/releases/tags/{tag}"))
