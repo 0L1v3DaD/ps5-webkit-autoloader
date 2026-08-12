@@ -31,14 +31,19 @@ instead of the unified-autoloader — so this flow installs the homescreen app.
 
 ## Frontend (`frontend/autoloader/`)
 
-- A splash screen, a log terminal and a progress bar. The exploit runs in a **hidden**
-  same-origin iframe pointing at slopkit's `poops.html?go=1&auto=1&...&autoload=payload.elf`.
-- On `window.load` the iframe is armed; at script parse it is blanked to `about:blank` so a
-  WebProcess-crash page restore never auto-runs the chain. Before arming, `clearSlopkitState()`
-  removes slopkit's one-shot latch and "stopped at …" markers from sessionStorage so every
-  launch restarts the full ladder.
-- `app.js` mirrors the chain's screen/stage/early/summary into the log (errors, stage changes
-  and summary verdicts) and receives the `?autoload` result via `postMessage`.
+> **TEMPORARY no-iframe workaround.** The homescreen app is currently a thin
+> redirect stub: a splash screen that, on `window.load`, clears slopkit's
+> one-shot latch / "stopped at …" markers from sessionStorage
+> (`clearSlopkitState()`) and then `window.location.replace()`s straight to
+> `slopkit/slopkit/poops.html?go=1&auto=1&trigger=netcontrol&payload=1&autoload=payload.elf`.
+> There is no iframe — the exploit runs top-level, in the same environment as
+> the original slopkit, so success rate can be compared. `app.js` no longer
+> mirrors logs; `poops.html` itself is re-skinned in the autoloader's style by
+> the patch (see below): cat hidden, terminal-style log, footer.
+>
+> The redirect still depends on AppCache serving the *exact* armed URL offline
+> (`EXPLOIT_IFRAME_URL` in `tools/gen_file_registry.py`) — otherwise the
+> `/app/ /app/index.html` FALLBACK entry would serve index.html and loop.
 
 `payload.elf` is a virtual name: the PC host serves the installer ELF there, the homescreen app
 serves the real unified-autoloader.
@@ -85,8 +90,13 @@ The patch (all in `slopkit/slopkit/poops.html`):
   `../../payloads/`.
 - A hidden menu tile so `payloadIsListed()` accepts the payload, and `PAYLOAD_MAX_SIZE` raised
   to 4 MiB.
-- Posts `{type:"wkal", kind:"autoload", ok, bytes}` to the parent page.
+- Posts `{type:"wkal", kind:"autoload", ok, bytes}` to the parent page (a harmless no-op now
+  that the page loads top-level).
 - Removes the ~1 MB cat gif.
+- **Temporary no-iframe skin** (overrides the `body.quiet` layout the iframe mirror used):
+  autoloader palette, `#cat` and the payload menu hidden, `#stage`/`#summary`/`#early`
+  re-shown, `#scr` restyled as a terminal, and a `#footer` crediting the autoloader with
+  the build version (`[[VERSION_PLACEHOLDER]]`, substituted for the ELF and PC host).
 
 To update slopkit: `git submodule update --remote third_party/slopkit`, re-run the script, and
 regenerate the patch if it no longer applies

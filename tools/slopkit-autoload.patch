@@ -3,18 +3,94 @@ deleted file mode 100644
 index a0a5538d0f0abba8263f49b5d3c30b66e499b473..0000000000000000000000000000000000000000
 Binary files a/slopkit/mmhmm-cats-ps5.gif and /dev/null differ
 diff --git a/slopkit/poops.html b/slopkit/poops.html
-index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679207d39eb 100644
+index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..f3dd4dffb5c43f0df537bcff63a44ff3dce1b552 100644
 --- a/slopkit/poops.html
 +++ b/slopkit/poops.html
-@@ -5,7 +5,6 @@
+@@ -3,9 +3,8 @@
+ <head>
+ <meta charset="utf-8">
  <meta name="viewport" content="width=device-width, initial-scale=1">
- <title>slopkit</title>
+-<title>slopkit</title>
++<title>WebKit Autoloader v[[VERSION_PLACEHOLDER]] by PLK (built [[BUILD_TIME_PLACEHOLDER]])</title>
  <link rel="preload" href="cat.jpg" as="image">
 -<link rel="preload" href="mmhmm-cats-ps5.gif" as="image">
  
  <script>(function () {
      var pending = [];
-@@ -185,7 +184,7 @@
+@@ -179,13 +178,78 @@
+     max-width:100%; margin:0 auto; }
+   #payloadMenu .payloadTile.busy { opacity:.42; }
+ 
+-  #wrap { display:none !important; }
+-</style>
++  #wrap { display:none !important; }
++
++  /* ── WKAL temporary no-iframe overlay (see tools/slopkit-autoload.patch) ──
++     The autoloader now redirects the browser straight here (no iframe), so
++     this page IS the UI: autoloader palette, no cat, terminal-style log,
++     stage/verdict re-shown (body.quiet hid them for the iframe mirror), and
++     an autoloader footer. */
++  html, body {
++    background: #0f172a;
++    background: -webkit-linear-gradient(180deg, #0f172a 0%, #0b1220 100%);
++  }
++  body {
++    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
++    justify-content: flex-start;
++    overflow-y: auto;
++    padding: 24px 0 76px;
++  }
++  #cat, #payloadMenu { display:none !important; }
++  #failureMessage {
++    display:block; margin:0 0 14px; color:#f87171; font-size:22px;
++    font-weight:700; text-align:center; letter-spacing:.02em;
++    background:rgba(248,113,113,.08); border:2px solid #f87171;
++    border-radius:8px; padding:10px 16px;
++  }
++  #failureMessage.on { display:block; }
++  #reboot { display:block; }
++  #reboot.on { display:block; }
++  #reboot.fine { display:none; }
++  body.quiet #stage { display:block; }
++  body.quiet #summary { display:block; }
++  body.quiet #early { display:block; }
++  body.loader-ready #scr { display:block; }
++  body.quiet #stage {
++    font-size:20px; font-weight:600; padding:10px 16px; border-radius:8px;
++    margin-bottom:14px; background:#1b2436; border:1px solid #2c3e5a;
++    color:#e2e8f0; text-align:center;
++  }
++  body.quiet #stage.ok { color:#7df966; border-color:#2c3e5a; }
++  body.quiet #stage.bad { color:#f87171; border-color:#2c3e5a; }
++  body.quiet #scr {
++    box-sizing:border-box; width:82vw; max-width:1220px; height:52vh;
++    background:#05070d; border:1px solid #1e3a5f; border-radius:10px;
++    font:.95rem/1.6 "SFMono-Regular", Menlo, Monaco, "Cascadia Mono", monospace;
++    color:#94a3b8; padding:.9rem 1.1rem; overflow-y:auto; margin:0 0 12px;
++    white-space:pre-wrap;
++  }
++  #early {
++    box-sizing:border-box; width:82vw; max-width:1220px;
++    font:.8rem/1.5 "SFMono-Regular", Menlo, Monaco, "Cascadia Mono", monospace;
++    color:#7c8795; background:#0b1220; border:1px solid #1e3a5f;
++    border-radius:8px; padding:.7rem 1rem; margin:0 0 12px; white-space:pre-wrap;
++  }
++  #summary {
++    box-sizing:border-box; width:82vw; max-width:1220px;
++    font:.8rem/1.5 "SFMono-Regular", Menlo, Monaco, "Cascadia Mono", monospace;
++    color:#7c8795; background:#0b1220; border:1px solid #1e3a5f;
++    border-radius:8px; padding:.7rem 1rem; margin:0 0 12px; white-space:pre-wrap;
++  }
++  #verdict { font-size:18px; }
++  #verdict.bad { color:#f87171; border-color:#f87171; }
++  #verdict.good, #verdict.on { color:#7df966; border-color:#2c3e5a; }
++  #footer {
++    position:fixed; bottom:12px; left:50%; -webkit-transform:translateX(-50%);
++    transform:translateX(-50%); font-size:.75rem; color:#4b5563;
++    line-height:1.5; text-align:center; z-index:20; pointer-events:none;
++  }
++</style>
+ </head>
  <body class="quiet">
  <div id="failureMessage">UNLUCKY &mdash; YOU NEED TO REBOOT</div>
  <div id="cat">
@@ -23,7 +99,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
  </div>
  <h1>poops</h1>
  <div id="reboot"></div>
-@@ -203,6 +202,7 @@
+@@ -203,6 +267,7 @@
    <a class="payloadTile" href="#" data-name="klogsrv-ps5.elf" data-key="klog"><img data-src="../ui/payload-klog-default.png" alt=""></a>
    <a class="payloadTile" href="#" data-name="shsrv-ps5.elf" data-key="shell"><img data-src="../ui/payload-shell-default.png" alt=""></a>
    <a class="payloadTile" href="#" data-name="websrv-ps5.elf" data-key="web"><img data-src="../ui/payload-web-default.png" alt=""></a>
@@ -31,7 +107,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
  </div>
  <div id="nav"></div>
  <div id="arm" hidden>Open this page with <b>?go=1</b> to arm it. Nothing runs
-@@ -293,6 +293,7 @@ const DEFAULT_ATTEMPTS = TRIGGER === "overflow" ? 96
+@@ -293,6 +358,7 @@ const DEFAULT_ATTEMPTS = TRIGGER === "overflow" ? 96
  const cfg = {
  
      payload: Q.get("payload") || "",
@@ -39,7 +115,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      trigger: TRIGGER,
      burn: BURN,
      netprobe: Q.get("netprobe") === "1",
-@@ -469,7 +470,7 @@ const rowByKey = new Map();
+@@ -469,7 +535,7 @@ const rowByKey = new Map();
  let payloadSendBusy = false;
  const PAYLOAD_PORT = 9021;
  const PAYLOAD_BUFFER_SIZE = 0x10000;
@@ -48,7 +124,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
  let payloadSendStore = null;
  let payloadSockaddrStore = null;
  let payloadSocketOptionStore = null;
-@@ -543,7 +544,7 @@ function preparePayloadSender() {
+@@ -543,7 +609,7 @@ function preparePayloadSender() {
      }
  }
  
@@ -57,7 +133,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      if (!elfldrSpawned)
          throw new Error("ELF loader is not ready");
      if (!P || !chain)
-@@ -555,7 +556,7 @@ async function sendPayloadToElfldr(name) {
+@@ -555,7 +621,7 @@ async function sendPayloadToElfldr(name) {
      if (!payloadIsListed(name))
          throw new Error("payload is not listed in this menu");
  
@@ -66,7 +142,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
          { cache: "no-store" });
      if (!response.ok)
          throw new Error("payload fetch failed: HTTP " + response.status);
-@@ -563,7 +564,7 @@ async function sendPayloadToElfldr(name) {
+@@ -563,7 +629,7 @@ async function sendPayloadToElfldr(name) {
      if (!bytes.length)
          throw new Error("payload is empty");
      if (bytes.length > PAYLOAD_MAX_SIZE)
@@ -75,7 +151,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      if (bytes.length < 4 || bytes[0] !== 0x7f || bytes[1] !== 0x45
          || bytes[2] !== 0x4c || bytes[3] !== 0x46)
          throw new Error("payload does not start with the ELF signature");
-@@ -727,10 +728,6 @@ function setCatResult(success) {
+@@ -727,10 +793,6 @@ function setCatResult(success) {
      if (failureMessage) failureMessage.className = success ? "" : "on";
      if (cat) {
          cat.className = success ? "ok" : "bad";
@@ -86,7 +162,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      }
  }
  
-@@ -1468,6 +1465,23 @@ async function runLadder() {
+@@ -1468,6 +1530,23 @@ async function runLadder() {
          flushMark("ELFLDR-MENU-INPAGE",
              "no-navigation-parked-racers-and-fds-remain-owned-port=9021");
          showPayloadMenu();
@@ -110,3 +186,13 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      }
  }
  
+@@ -1789,6 +1868,7 @@ function lastRunText() {
+         lockNav(false);
+     });
+ })();
+-</script>
+-</body>
++</script>
++<footer id="footer">WebKit Autoloader v[[VERSION_PLACEHOLDER]] by PLK (built [[BUILD_TIME_PLACEHOLDER]])<br />This project is free and open source: github.com/itsPLK/ps5-webkit-autoloader</footer>
++</body>
+ </html>

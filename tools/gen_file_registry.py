@@ -74,8 +74,10 @@ VERSION_PLACEHOLDER = b"[[VERSION_PLACEHOLDER]]"
 BUILD_TIME_PLACEHOLDER = b"[[BUILD_TIME_PLACEHOLDER]]"
 
 # Files that carry the version/badge and get the placeholders replaced:
-# installer page at the dist root, and the autoloader app under /app/.
-VERSIONED_PATHS = ("/index.html", "/app/index.html")
+# installer page at the dist root, the autoloader app under /app/, and the
+# restyled slopkit page (its footer shows the build version).
+VERSIONED_PATHS = ("/index.html", "/app/index.html",
+                   "/app/slopkit/slopkit/poops.html")
 
 
 def apply_version_placeholder(path, data, version, build_time):
@@ -108,9 +110,11 @@ def compress_entry(data):
     return comp, True
 
 
-# The autoloader iframe loads poops.html with this exact query string. AppCache
-# matches URLs exactly (query included), so the manifest must list the full URL
-# or the console serves a fallback document instead of the exploit page.
+# The autoloader redirects the browser straight to poops.html with this exact
+# query string (TEMPORARY no-iframe workaround). AppCache matches URLs exactly
+# (query included), so the manifest must list the full URL or the console
+# serves a fallback document instead of the exploit page — that would put
+# index.html in a redirect loop.
 # Keep in sync with EXPLOIT_URL in frontend/autoloader/app.js.
 EXPLOIT_IFRAME_URL = (
     "/app/slopkit/slopkit/poops.html"

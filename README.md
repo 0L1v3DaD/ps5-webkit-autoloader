@@ -6,7 +6,7 @@
 <p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>9.00&ndash;12.00</b>.</p>
 
 > [!NOTE]
-> Uses an early release of the [slopkit](https://github.com/jordyidk/slopkit) WebKit exploit under the hood with minimal changes (via a [patch file](https://github.com/itsPLK/ps5-webkit-autoloader/blob/main/tools/slopkit-autoload.patch)), so it should have the same stability as the original. Keep in mind that reliability can vary across firmwares, and it may not be suitable for everyday usage yet.
+> Currently runs the original [slopkit](https://github.com/jordyidk/slopkit) WebKit exploit directly, with minimal changes (via a [patch file](https://github.com/itsPLK/ps5-webkit-autoloader/blob/main/tools/slopkit-autoload.patch)), so it should have the same stability as the original. Keep in mind that reliability can vary across firmwares, and it may not be suitable for everyday usage yet.
 
 <p align="center">
     <b>Other Autoloaders:</b><br>
