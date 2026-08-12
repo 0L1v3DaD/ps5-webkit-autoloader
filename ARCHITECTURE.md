@@ -82,15 +82,19 @@ A PS5 payload running a `libmicrohttpd` server on port **18181**:
 The patch (all in `slopkit/slopkit/poops.html`):
 
 - `?autoload=<name>`: after the chain finishes and elfldr is up, sends the named payload from
-  `../../payloads/`.
-- A hidden menu tile so `payloadIsListed()` accepts the payload, and `PAYLOAD_MAX_SIZE` raised
-  to 4 MiB.
+  `../../payloads/`. Upstream's `exactQuery()` (which refuses non-canonical URLs) is relaxed to
+  tolerate the extra `autoload` query key, and the iframe URL is the canonical production query
+  (`go=1&auto=1&production=1&trigger=netcontrol&attempts=8&only=<full ladder>&log=debug&payload=1`)
+  plus `autoload=payload.elf&v=41`.
+- A hidden menu tile so `payloadIsListed()` accepts the payload.
 - Posts `{type:"wkal", kind:"autoload", ok, bytes}` to the parent page.
 - Removes the ~1 MB cat gif.
 
-To update slopkit: `git submodule update --remote third_party/slopkit`, re-run the script, and
-regenerate the patch if it no longer applies
-(`git -C third_party/slopkit diff > tools/slopkit-autoload.patch`).
+To update slopkit: `git -C third_party/slopkit fetch && git -C third_party/slopkit checkout <commit>`,
+re-run the script, and regenerate the patch if it no longer applies
+(`git -C <scratch copy> diff --cached --full-index > tools/slopkit-autoload.patch`). Keep the
+offsets cache-bust fallback in `tools/gen_file_registry.py` (`?v=19`) and the iframe URLs in
+`app.js`/`gen_file_registry.py` in sync.
 
 ## Payload dependency
 

@@ -46,7 +46,7 @@
      AppCache manifest lists this exact URL so the console can serve it
      offline (AppCache matches URLs including the query string). */
   var EXPLOIT_URL =
-    'slopkit/slopkit/poops.html?go=1&auto=1&trigger=netcontrol&payload=1&autoload=payload.elf&v=17';
+    'slopkit/slopkit/poops.html?go=1&auto=1&production=1&trigger=netcontrol&attempts=8&only=ps0_preflight,ps1_prepare,ps3_stage0,ps4_validate,ps5_stage1,ps6_stage2,ps8_stage3,ps9_stage4,ps10_stage5&log=debug&payload=1&autoload=payload.elf&v=41';
 
   function uiLog(message, type) {
     type = type || 'info';
@@ -191,7 +191,7 @@
          anything that looks like a failure — never the full raw stream
          (that floods the UI and hides the actual result). */
       if (/^>/.test(line) || /^\[\+\]/.test(line)
-        || /^(STAGE[1-5]|ALLPROC-CHECK|ALIASES-REPAIRED|POOPS-COMPLETE|POOPS-VERDICT|LATCH-HELD|LATCH-READ|OFFSETS-READY|WEBKIT-BASE|MODULE-BASES|SOCKETS|SPAWN|WAKEGATE)/.test(line)) {
+        || /^(STAGE[0-5]|ALLPROC-CHECK|ALIASES-REPAIRED|POOPS-COMPLETE|POOPS-VERDICT|LATCH-HELD|LATCH-READ|OFFSETS-READY|WEBKIT-BASE|MODULE-BASES|SOCKETS|SPAWN|WAKEGATE)/.test(line)) {
         uiLog('[log] ' + line, 'info');
       } else if (/FAIL|ERROR|REFUSED|REBOOT|failed|panic|exception/i.test(line)
         || /^\[-\]/.test(line)) {

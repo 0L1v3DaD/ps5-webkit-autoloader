@@ -3,7 +3,7 @@ deleted file mode 100644
 index a0a5538d0f0abba8263f49b5d3c30b66e499b473..0000000000000000000000000000000000000000
 Binary files a/slopkit/mmhmm-cats-ps5.gif and /dev/null differ
 diff --git a/slopkit/poops.html b/slopkit/poops.html
-index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679207d39eb 100644
+index eb01cd36a41d68cc74a2ca6e60643c2e33770cd4..ff8aaff17f7268088cc9b7b63cb5dd12f3d06d43 100644
 --- a/slopkit/poops.html
 +++ b/slopkit/poops.html
 @@ -5,7 +5,6 @@
@@ -14,7 +14,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
  
  <script>(function () {
      var pending = [];
-@@ -185,7 +184,7 @@
+@@ -188,7 +187,7 @@
  <body class="quiet">
  <div id="failureMessage">UNLUCKY &mdash; YOU NEED TO REBOOT</div>
  <div id="cat">
@@ -23,15 +23,15 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
  </div>
  <h1>poops</h1>
  <div id="reboot"></div>
-@@ -203,6 +202,7 @@
-   <a class="payloadTile" href="#" data-name="klogsrv-ps5.elf" data-key="klog"><img data-src="../ui/payload-klog-default.png" alt=""></a>
-   <a class="payloadTile" href="#" data-name="shsrv-ps5.elf" data-key="shell"><img data-src="../ui/payload-shell-default.png" alt=""></a>
-   <a class="payloadTile" href="#" data-name="websrv-ps5.elf" data-key="web"><img data-src="../ui/payload-web-default.png" alt=""></a>
-+  <a class="payloadTile" href="#" data-name="payload.elf" data-key="autoload" style="display:none"><img data-src="../ui/payload-shell-default.png" alt=""></a>
+@@ -209,6 +208,7 @@
+     <a class="payloadTile" href="#" data-name="websrv-ps5.elf" data-key="web"><img data-src="../ui/payload-web-default.png" alt=""></a>
+     <a class="payloadTile" href="#" data-name="kstuff.elf" data-key="kstuff"><img data-src="../ui/payload-kstuff-default.png" alt="KStuff"></a>
+     <a class="payloadTile" href="#" data-name="PLK.elf" data-key="plk"><img data-src="../ui/payload-plk-default.png" alt="PLK PLD Manager"></a>
++    <a class="payloadTile" href="#" data-name="payload.elf" data-key="autoload" style="display:none"><img data-src="../ui/payload-shell-default.png" alt=""></a>
+   </div>
  </div>
  <div id="nav"></div>
- <div id="arm" hidden>Open this page with <b>?go=1</b> to arm it. Nothing runs
-@@ -293,6 +293,7 @@ const DEFAULT_ATTEMPTS = TRIGGER === "overflow" ? 96
+@@ -353,6 +353,7 @@ const DEFAULT_ATTEMPTS = TRIGGER === "overflow" ? 96
  const cfg = {
  
      payload: Q.get("payload") || "",
@@ -39,16 +39,15 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      trigger: TRIGGER,
      burn: BURN,
      netprobe: Q.get("netprobe") === "1",
-@@ -469,7 +470,7 @@ const rowByKey = new Map();
- let payloadSendBusy = false;
- const PAYLOAD_PORT = 9021;
- const PAYLOAD_BUFFER_SIZE = 0x10000;
--const PAYLOAD_MAX_SIZE = 0x200000;
-+const PAYLOAD_MAX_SIZE = 0x400000;
- let payloadSendStore = null;
- let payloadSockaddrStore = null;
- let payloadSocketOptionStore = null;
-@@ -543,7 +544,7 @@ function preparePayloadSender() {
+@@ -404,6 +405,7 @@ function exactQuery(expected) {
+     const keys = Object.keys(expected);
+     let count = 0, exact = true;
+     Q.forEach((value, key) => {
++        if (key === "autoload") return;
+         count++;
+         if (!Object.prototype.hasOwnProperty.call(expected, key)
+             || expected[key] !== value) exact = false;
+@@ -840,7 +842,7 @@ function preparePayloadSender() {
      }
  }
  
@@ -57,7 +56,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      if (!elfldrSpawned)
          throw new Error("ELF loader is not ready");
      if (!P || !chain)
-@@ -555,7 +556,7 @@ async function sendPayloadToElfldr(name) {
+@@ -852,7 +854,7 @@ async function sendPayloadToElfldr(name) {
      if (!payloadIsListed(name))
          throw new Error("payload is not listed in this menu");
  
@@ -66,7 +65,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
          { cache: "no-store" });
      if (!response.ok)
          throw new Error("payload fetch failed: HTTP " + response.status);
-@@ -563,7 +564,7 @@ async function sendPayloadToElfldr(name) {
+@@ -860,7 +862,7 @@ async function sendPayloadToElfldr(name) {
      if (!bytes.length)
          throw new Error("payload is empty");
      if (bytes.length > PAYLOAD_MAX_SIZE)
@@ -75,7 +74,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      if (bytes.length < 4 || bytes[0] !== 0x7f || bytes[1] !== 0x45
          || bytes[2] !== 0x4c || bytes[3] !== 0x46)
          throw new Error("payload does not start with the ELF signature");
-@@ -727,10 +728,6 @@ function setCatResult(success) {
+@@ -1024,10 +1026,6 @@ function setCatResult(success) {
      if (failureMessage) failureMessage.className = success ? "" : "on";
      if (cat) {
          cat.className = success ? "ok" : "bad";
@@ -86,15 +85,12 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
      }
  }
  
-@@ -1468,6 +1465,23 @@ async function runLadder() {
+@@ -1771,6 +1769,20 @@ async function runLadder() {
          flushMark("ELFLDR-MENU-INPAGE",
              "no-navigation-parked-racers-and-fds-remain-owned-port=9021");
          showPayloadMenu();
 +        if (cfg.autoload) {
 +            stage("autoloading " + cfg.autoload + " in 4 s", "ok");
-+            // TODO: replace this fixed 4 s wait with a loop that polls until
-+            // elfldr accepts connections (port 9021), like the other
-+            // autoloaders do.
 +            setTimeout(function () {
 +                sendPayloadToElfldr(cfg.autoload, "../../payloads/").then(function (r) {
 +                    flushMark("AUTOLOAD-OK", "name=" + cfg.autoload + "-bytes=" + r.bytes);
@@ -106,7 +102,7 @@ index c1a09ddcf5b7323c81b5fed6b2dc4a0b9a7d9e91..49fead0da8b7965abaad07a41809b679
 +                    try { window.parent.postMessage({ type: "wkal", kind: "autoload", ok: false, why: String(err && err.message || err) }, "*"); } catch (e) { }
 +                });
 +            }, 4000);
-+                 }
++        }
      }
  }
  
