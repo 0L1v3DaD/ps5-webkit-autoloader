@@ -72,12 +72,14 @@ fi
 
 # 4. Sanity check: the patched main.js must carry our integration markers and
 #    the bundled payloads dir must be gone. Catches a silently truncated patch.
-if ! grep -q 'autoloadName = new URLSearchParams' main.js \
+if ! grep -q 'wkalAutoloadName = new URLSearchParams' main.js \
+    || ! grep -q 'wkalAutoload' main.js \
     || ! grep -q '../shared/' main.js \
+    || grep -q 'confirm(' main.js \
     || [ -d payloads ]; then
     echo "Error: umtx2 patch verification FAILED — integration markers missing."
     echo "tools/umtx2-autoload.patch is incomplete or out of date."
     echo "Regenerate it from the pristine submodule and re-run."
     exit 1
 fi
-echo "umtx2: patch verification OK (autoload, shared elfldr, payloads pruned)."
+echo "umtx2: patch verification OK (mainloop autoload, shared elfldr, confirm removed, payloads pruned)."

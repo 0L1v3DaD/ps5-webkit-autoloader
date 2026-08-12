@@ -160,9 +160,16 @@ pruned — the exploit uses the shared elfldr.
 The patch (in `umtx2/main.js`):
 
 - Loads the **shared elfldr** from `../shared/elfldr-ps5.elf` instead of `payloads/elfldr-ps5.elf`.
-- `?autoload=<name>`: after elfldr loads, waits 4 s (it must bind 9021), then fetches
-  `../payloads/<name>` (the `/app/payloads/` dir), stages it and sends it to elfldr on port 9021.
-  Posts `{type:"wkal", kind:"autoload", ok, bytes}` to the parent page on success/failure.
+- Adds an optional `base` parameter to `load_payload_into_elf_store_from_local_file` and
+  `load_local_elf` so different base paths can be used without duplicating the fetch logic.
+- Threads `payload_info.wkalBase` through the main loop's fetch call, so the payload is
+  always fetched via the same code path as a regular button press.
+- `?autoload=<name>`: after elfldr loads and `switchPage("payloads-view")` completes,
+  waits 4 s (it must bind 9021), then fires a synthetic `MAINLOOP_EXECUTE_PAYLOAD_REQUEST`
+  event with `{fileName, wkalBase: "../payloads/", toPort: 9021, wkalAutoload: true}`.
+  The main loop processes it identically to a button press.
+- The main loop's success and error handlers post `{type:"wkal", kind:"autoload", ok, bytes}`
+  (or `{ok:false, why}`) to the parent page when `payload_info.wkalAutoload` is set.
 - Neutralizes the `confirm()` dialogs around the elfldr probe so the chain runs unattended.
 
 To update umtx2: `git -C third_party/umtx2 fetch && git -C third_party/umtx2 checkout <commit>`,
