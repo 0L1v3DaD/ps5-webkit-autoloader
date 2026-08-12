@@ -3,15 +3,21 @@
 
 Version scheme (mirrors the ps5-bdjb-autoloader project):
 
-    dev:     <base>-<build_type>-<suffix>
-    stable:  <base>
+    dev:          <base>-<build_type>-<suffix>
+    stable:       <base>
+    pre-release:  <base>-pre-<suffix>
 
     e.g. 0.0.1-dev-abc1234           clean tree, dev build
          0.0.1-dev-20260806123500    dirty tree — timestamp instead of hash
+         0.0.1-pre-abc1234           clean tree, pre-release build
          0.0.1                       stable build — no hash/timestamp suffix
 
 The base version comes from WKAL_VERSION in include/wkali.h. BUILD_TYPE is
 taken from the BUILD_TYPE environment variable (default: dev).
+
+When CUSTOM_VERSION is set, it is appended to the base version and takes
+precedence over the build type (e.g. CUSTOM_VERSION=umtx2-test -> 0.0.1-umtx2-test).
+The custom suffix is also shown in the PS5 homescreen app title.
 
 Usage:
     gen_version.py                 # (re)generate version header and app metadata
@@ -60,8 +66,11 @@ def get_version_info(build_type=None):
     version string to display everywhere."""
     if build_type is None:
         build_type = os.environ.get("BUILD_TYPE", "dev")
-    if build_type not in ("dev", "stable"):
+    if build_type not in ("dev", "stable", "pre-release"):
         build_type = "dev"
+
+    base = read_base_version()
+    custom = os.environ.get("CUSTOM_VERSION", "").strip()
 
     git_hash = git("rev-parse", "--short", "HEAD")
     dirty = git("status", "--porcelain")
@@ -69,13 +78,16 @@ def get_version_info(build_type=None):
     if dirty:
         suffix = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
-    if build_type == "stable":
-        full = read_base_version()
+    if custom:
+        full = f"{base}-{custom}"
+    elif build_type == "stable":
+        full = base
     else:
-        full = f"{read_base_version()}-{build_type}-{suffix}"
+        segment = "pre" if build_type == "pre-release" else "dev"
+        full = f"{base}-{segment}-{suffix}"
 
     return {
-        "base": read_base_version(),
+        "base": base,
         "build_type": build_type,
         "suffix": suffix,
         "full": full,
@@ -84,6 +96,7 @@ def get_version_info(build_type=None):
         "build_time": datetime.datetime.now(datetime.timezone.utc).strftime(
             "%Y-%m-%d %H:%M:%S UTC"
         ),
+        "title": full if custom else base,
     }
 
 
@@ -123,11 +136,12 @@ def main(argv=None):
 
     write_if_changed(HEADER, header_text(info).encode("utf-8"))
 
-    # PS5 homescreen app metadata — title gets the base version only (e.g. v0.1.0)
+    # PS5 homescreen app metadata — title gets the base version (or the full
+    # custom version) so the app label reflects what was built.
     with open(PARAM_TEMPLATE, "rb") as f:
         param = f.read()
     write_if_changed(
-        PARAM_JSON, param.replace(VERSION_PLACEHOLDER, info["base"].encode("utf-8"))
+        PARAM_JSON, param.replace(VERSION_PLACEHOLDER, info["title"].encode("utf-8"))
     )
     return 0
 
