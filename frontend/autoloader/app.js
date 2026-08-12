@@ -78,6 +78,7 @@
       logContainer.removeChild(logContainer.firstChild);
     }
     logContainer.parentNode.scrollTop = logContainer.parentNode.scrollHeight;
+    return entry;
   }
 
   function updateProgress(percent, message) {
@@ -303,8 +304,12 @@
 
   /* Mirror umtx2's live #console log (#console > div, classed LOG-*) from the
      same-origin exploit iframe into our own log view, mapping its severity
-     classes onto ours. */
+     classes onto ours. umtx2 updates its last console line in place for
+     progress logs (FLAG_TEMP, e.g. "Race attempt N-M"), so we update our
+     matching last line in place too. */
   var umtx2MirroredLines = 0;
+  var umtx2LastEntry = null;
+  var umtx2LastText = '';
   function mirrorUmtx2() {
     var doc;
     try {
@@ -315,21 +320,37 @@
     if (!doc || !chainStarted) return;
     var lines = doc.querySelectorAll('#console > div');
     if (lines.length < umtx2MirroredLines) {
+      /* Iframe reloaded (#console recreated) — restart from a fresh document. */
       umtx2MirroredLines = lines.length;
+      umtx2LastEntry = null;
+      umtx2LastText = '';
     }
     for (; umtx2MirroredLines < lines.length; umtx2MirroredLines++) {
       var el = lines[umtx2MirroredLines];
       var text = (el.textContent || '').trim();
       if (!text) continue;
       var cls = el.className || '';
+      var entry;
       if (/LOG-ERROR/.test(cls)) {
-        uiLog('[umtx2] ' + text, 'error');
+        entry = uiLog('[umtx2] ' + text, 'error');
       } else if (/LOG-WARN/.test(cls)) {
-        uiLog('[umtx2] ' + text, 'warning');
+        entry = uiLog('[umtx2] ' + text, 'warning');
       } else if (/LOG-SUCCESS/.test(cls)) {
-        uiLog('[umtx2] ' + text, 'success');
+        entry = uiLog('[umtx2] ' + text, 'success');
       } else {
-        uiLog('[umtx2] ' + text, 'info');
+        entry = uiLog('[umtx2] ' + text, 'info');
+      }
+      umtx2LastEntry = entry;
+      umtx2LastText = text;
+    }
+    /* Live-update the last mirrored line when umtx2 rewrites it in place. */
+    if (lines.length > 0 && umtx2LastEntry
+      && umtx2LastEntry === logContainer.lastChild) {
+      var last = lines[lines.length - 1];
+      var lastText = (last.textContent || '').trim();
+      if (lastText && lastText !== umtx2LastText) {
+        umtx2LastEntry.textContent = '[umtx2] ' + lastText;
+        umtx2LastText = lastText;
       }
     }
   }
