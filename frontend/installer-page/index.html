@@ -176,15 +176,20 @@
         setProgress(100);
       }
 
+      function setFailed() {
+        statusEl.textContent = 'Install failed';
+        detailEl.textContent = 'The app could not be installed. Close this page and re-run the installer.';
+      }
+
+      function setSlow() {
+        statusEl.textContent = 'Caching is taking unusually long';
+        detailEl.textContent = 'The shortcut is only created after the cache finishes. If this never completes, close the browser and re-run the installer.';
+      }
+
       function setCaching() {
         statusEl.textContent = 'Caching content...';
         detailEl.textContent = 'Please wait a moment. Do not close this page yet!';
         progressWrap.hidden = false;
-      }
-
-      function setOffline() {
-        statusEl.textContent = 'Starting WebKit Autoloader...';
-        goToAutoloader();
       }
 
       function goToAutoloader() {
@@ -201,44 +206,55 @@
               probeOk = true;
               setCaching();
             } else {
-              setOffline();
+              goToAutoloader();
             }
           }
         };
         xhr.onerror = function () {
-          setOffline();
+          goToAutoloader();
         };
         xhr.ontimeout = function () {
-          setOffline();
+          goToAutoloader();
         };
         xhr.send();
       }
 
-      function signalCacheComplete() {
+      function installApp() {
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/cache_complete', true);
-        xhr.timeout = 3000;
+        xhr.open('GET', '/install', true);
+        xhr.timeout = 30000;
         xhr.onreadystatechange = function () {
-          if (xhr.readyState === 4 && xhr.status === 200) {
-            setInstalled();
+          if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+              setInstalled();
+            } else {
+              setFailed();
+            }
           }
         };
+        xhr.onerror = function () {
+          setFailed();
+        };
+        xhr.ontimeout = function () {
+          setFailed();
+        };
         xhr.send();
       }
 
-      function maybeSignal() {
+      function maybeInstall() {
         if (completed) {
           return;
         }
         completed = true;
-        signalCacheComplete();
+        installApp();
       }
 
       window.addEventListener('load', function () {
         probeServer();
 
-        /* Signal the installer only once the AppCache is current, so the
-           server stays up long enough for the full cache to download. */
+        /* The shortcut is created only once the AppCache is current, so the
+           installer never installs a partial cache. /install then both installs
+           the homescreen app and stops the server. */
         var waitTimer = setInterval(function () {
           if (completed) {
             clearInterval(waitTimer);
@@ -253,14 +269,16 @@
               ? window.applicationCache.status : -1;
           if (st === -1 || st === window.applicationCache.IDLE) {
             clearInterval(waitTimer);
-            maybeSignal();
+            maybeInstall();
           }
         }, 1000);
 
-        /* Safety cap — never leave the installer hanging. */
+        /* Safety cap — never leave the installer hanging on screen. It does NOT
+           install or exit: a partial cache must never create a shortcut, so the
+           user simply re-runs the installer if this never completes. */
         setTimeout(function () {
           if (!completed && probeOk) {
-            maybeSignal();
+            setSlow();
           }
         }, 120000);
       });
@@ -275,8 +293,8 @@
             setProgress(pct);
           }
         });
-        window.applicationCache.addEventListener('cached', maybeSignal);
-        window.applicationCache.addEventListener('noupdate', maybeSignal);
+        window.applicationCache.addEventListener('cached', maybeInstall);
+        window.applicationCache.addEventListener('noupdate', maybeInstall);
         window.applicationCache.addEventListener('updateready', function () {
           if (window.applicationCache.status === window.applicationCache.UPDATEREADY) {
             window.applicationCache.swapCache();

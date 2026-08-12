@@ -29,11 +29,14 @@ VERSION_HEADER := include/wkali_version.h
 
 # Frontend sources — staged into frontend/dist/ before registry generation:
 #   installer-page/  → cache/progress entry page at dist root
-#   autoloader/      → the actual WKAL app, served under /app/
+#   pointer/         → stable /app/index.html entry that redirects into the
+#                      versioned app dir after verifying its __complete__ marker
+#   autoloader/      → the actual WKAL app, served under /app/<version>/
 FRONTEND_INSTALLER_PAGE := frontend/installer-page
+FRONTEND_POINTER := frontend/pointer
 FRONTEND_AUTOLOADER := frontend/autoloader
 FRONTEND_STAGE := frontend/dist
-FRONTEND_FILES := $(shell find $(FRONTEND_INSTALLER_PAGE) $(FRONTEND_AUTOLOADER) -type f 2>/dev/null)
+FRONTEND_FILES := $(shell find $(FRONTEND_INSTALLER_PAGE) $(FRONTEND_POINTER) $(FRONTEND_AUTOLOADER) -type f 2>/dev/null)
 
 # Generated icon assets (master: assets/icon.svg, see tools/gen_icons.py)
 ICON_MASTER := assets/icon.svg
@@ -96,10 +99,13 @@ payload-deps:
 
 $(FILE_REGISTRY_STAMP): $(FRONTEND_FILES) version icons slopkit-prepare umtx2-prepare payload-deps
 	@echo "Staging frontend into $(FRONTEND_STAGE)/..."
-	rm -rf $(FRONTEND_STAGE)
-	mkdir -p $(FRONTEND_STAGE)/app
-	cp -R $(FRONTEND_INSTALLER_PAGE)/. $(FRONTEND_STAGE)/
-	cp -R $(FRONTEND_AUTOLOADER)/. $(FRONTEND_STAGE)/app/
+	@V=$$($(PYTHON) tools/gen_version.py --print); \
+	rm -rf $(FRONTEND_STAGE) && \
+	mkdir -p $(FRONTEND_STAGE)/app/$$V && \
+	cp -R $(FRONTEND_INSTALLER_PAGE)/. $(FRONTEND_STAGE)/ && \
+	cp -R $(FRONTEND_POINTER)/. $(FRONTEND_STAGE)/app/ && \
+	cp -R $(FRONTEND_AUTOLOADER)/. $(FRONTEND_STAGE)/app/$$V/ && \
+	echo "$$V" > $(FRONTEND_STAGE)/VERSION
 	@echo "Generating file registry from $(FRONTEND_STAGE)/..."
 	$(PYTHON) tools/gen_file_registry.py $(FRONTEND_STAGE) $(FILE_REGISTRY_H) $(FILE_REGISTRY_C)
 	@touch $(FILE_REGISTRY_STAMP)

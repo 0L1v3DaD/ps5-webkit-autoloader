@@ -1,6 +1,7 @@
 /*
  * HTTP Server - serves the cached frontend files from the generated file
- * registry and handles the /cache_complete shutdown signal.
+ * registry and handles the /install route (installs the homescreen app once
+ * the cache is complete and shuts the server down).
  */
 
 #include <stdio.h>
@@ -13,15 +14,16 @@
 #include "http_server.h"
 #include "file_registry.h"
 #include "inflate.h"
+#include "app_installer.h"
 
 /* CORS is intentionally `*`: the installer page is also served from the PC
  * host (manuals.playstation.net over HTTPS), which cross-origin XHRs this
  * on-console server (http://127.0.0.1:18181) for /version and
- * /cache_complete. The server binds 127.0.0.1 only and lives for seconds.
+ * /install. The server binds 127.0.0.1 only and lives for seconds.
  * Do not restrict unless that flow changes. */
 #define CORS_ORIGIN "*"
 
-/* Shared flag — set to 0 by /cache_complete, read by the main loop.
+/* Shared flag — set to 0 by a successful /install, read by the main loop.
  * atomic so the store in a connection thread is visible to the main loop. */
 atomic_int http_keep_running = 1;
 
@@ -68,12 +70,27 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
     struct MHD_Response *resp = NULL;
     int http_status = MHD_HTTP_OK;
 
-    if (strcmp(url, ROUTE_CACHE_COMPLETE) == 0) {
-        wkali_log("[WKALI] Cache complete signal received. Shutting down...\n");
-        resp = MHD_create_response_from_buffer(strlen("OK"), (void *)"OK",
-                                               MHD_RESPMEM_PERSISTENT);
-        MHD_add_response_header(resp, "Content-Type", "text/plain");
-        atomic_store(&http_keep_running, 0);
+    if (strcmp(url, ROUTE_INSTALL) == 0) {
+        /* Called by the installer page once the AppCache is fully cached. The
+         * homescreen app is only installed/updated now — never on startup —
+         * so a shortcut is never created for a partial cache. On failure the
+         * server stays up and the page tells the user to re-run the installer. */
+        int err = wkali_install_app_if_needed();
+        if (err == 0) {
+            wkali_log("[WKALI] App installed. Shutting down...\n");
+            resp = MHD_create_response_from_buffer(strlen("OK"), (void *)"OK",
+                                                   MHD_RESPMEM_PERSISTENT);
+            MHD_add_response_header(resp, "Content-Type", "text/plain");
+            http_status = MHD_HTTP_OK;
+            atomic_store(&http_keep_running, 0);
+        } else {
+            wkali_log("[WKALI] App install failed (%d). Staying up.\n", err);
+            const char *fail = "Install failed";
+            resp = MHD_create_response_from_buffer(strlen(fail), (void *)fail,
+                                                   MHD_RESPMEM_PERSISTENT);
+            MHD_add_response_header(resp, "Content-Type", "text/plain");
+            http_status = MHD_HTTP_INTERNAL_SERVER_ERROR;
+        }
     } else if (strcmp(url, ROUTE_VERSION) == 0) {
         resp = MHD_create_response_from_buffer(strlen(WKAL_FULL_VERSION),
                                                (void *)WKAL_FULL_VERSION,
