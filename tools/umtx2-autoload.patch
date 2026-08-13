@@ -51,7 +51,7 @@
 +    // WKAL autoload: if the page was opened with ?autoload=<name>, wait 4 s for
 +    // elfldr to bind port 9021, then dispatch a synthetic payload request through
 +    // the main loop — exactly as if the user pressed the corresponding button.
-+    var wkalAutoloadName = new URLSearchParams(location.search).get("autoload") || sessionStorage.getItem("wkal_autoload");
++    var wkalAutoloadName = new URLSearchParams(location.search).get("autoload");
 +    if (wkalAutoloadName && is_elfldr_running) {
 +        await log("autoload: waiting 4 s for elfldr to bind 9021...", LogLevel.LOG);
 +        setTimeout(function () {
