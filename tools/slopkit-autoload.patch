@@ -1,23 +1,19 @@
 diff --git a/slopkit/poops.html b/slopkit/poops.html
-index eb01cd3..57a1c15 100644
+index eb01cd3..ce60b95 100644
 --- a/slopkit/poops.html
 +++ b/slopkit/poops.html
-@@ -208,7 +208,8 @@
-     <a class="payloadTile" href="#" data-name="shsrv-ps5.elf" data-key="shell"><img data-src="../ui/payload-shell-default.png" alt=""></a>
+@@ -209,6 +209,7 @@
      <a class="payloadTile" href="#" data-name="websrv-ps5.elf" data-key="web"><img data-src="../ui/payload-web-default.png" alt=""></a>
      <a class="payloadTile" href="#" data-name="kstuff.elf" data-key="kstuff"><img data-src="../ui/payload-kstuff-default.png" alt="KStuff"></a>
--    <a class="payloadTile" href="#" data-name="PLK.elf" data-key="plk"><img data-src="../ui/payload-plk-default.png" alt="PLK PLD Manager"></a>
-+    <a class="payloadTile" href="#" data-name="PLK.elf" data-key="plk"><img data-src="../ui/payload-plk-default.png" alt="PLK PLD Manager"></a>
+     <a class="payloadTile" href="#" data-name="PLK.elf" data-key="plk"><img data-src="../ui/payload-plk-default.png" alt="PLK PLD Manager"></a>
 +    <a class="payloadTile" href="#" data-name="payload.elf" data-key="autoload" style="display:none"><img data-src="../ui/payload-shell-default.png" alt=""></a>
    </div>
  </div>
  <div id="nav"></div>
-@@ -352,7 +353,8 @@ const DEFAULT_ATTEMPTS = TRIGGER === "overflow" ? 96
- 
+@@ -353,6 +354,7 @@ const DEFAULT_ATTEMPTS = TRIGGER === "overflow" ? 96
  const cfg = {
  
--    payload: Q.get("payload") || "",
-+    payload: Q.get("payload") || "",
+     payload: Q.get("payload") || "",
 +    autoload: Q.get("autoload") || "",
      trigger: TRIGGER,
      burn: BURN,
