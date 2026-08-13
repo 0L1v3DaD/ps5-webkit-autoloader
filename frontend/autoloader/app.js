@@ -142,6 +142,10 @@
     if (data.ok) {
       uiLog('Payload loaded (' + data.bytes + ' bytes sent to elfldr).', 'success');
       updateProgress(100, 'Autoload finished.');
+
+      /* Payload is running as its own process now — unload the iframe to
+         free the memory it held and avoid a browser OOM dialog. */
+      try { exploitEl.src = 'about:blank'; } catch (e) { }
     } else {
       uiLog('[ERROR] Autoload failed: ' + (data.why || 'unknown error'), 'error');
       updateProgress(0, 'Autoload failed.');
