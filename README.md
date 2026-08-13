@@ -88,15 +88,34 @@ The autoloader content is cached on the console, so updating is exactly the same
 The latest installer payload will re-create the homescreen app and refresh the cached page for you. Your payloads and `autoload.txt` on USB / internal storage are never touched.
 </Details>
 
+<Details>
+<Summary><i>How to use a custom ELF Loader?</i></Summary>
+
+By default, the autoloader uses a custom version of **elfldr** that only accepts connections from the PS5 itself (localhost). This improves security by preventing other devices on your network from sending payloads to your console.
+
+If you want to use a "normal" ELF Loader that allows sending payloads from any device, you can simply load it through **Payload Manager**.
+
+Alternatively, if you are using a manual config file (`autoload.txt`):
+1. Place your custom ELF Loader (e.g. `elfldr.elf`) in the `ps5_autoloader` directory.
+2. Add `elfldr.elf` to your `autoload.txt`.
+3. **Note**: If you are loading other payloads right after `elfldr.elf` in your `autoload.txt`, add a sleep command immediately after it (like `!4000` to sleep for 4 seconds) to give the new ELF Loader time to start up and listen before subsequent payloads are sent.
+
+Example `autoload.txt`:
+```text
+# Load custom ELF Loader
+elfldr.elf
+# Give it 4 seconds to start up (only needed if sending more payloads)
+!4000
+# Send other payloads
+etaHEN.elf
+```
+</Details>
+
 ---
 
 ## For developers
 
 The technical internals and project architecture are documented in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
-
-To build the autoloader pointed at a specific exploit regardless of firmware (e.g. to test on an
-unsupported firmware), set `FORCE_EXPLOIT=umtx2` or `FORCE_EXPLOIT=slopkit` when building
-(`make dev`, `make host`, or `./build_release.sh`). The exploit's own firmware guard still applies.
 
 ## Credits
 
