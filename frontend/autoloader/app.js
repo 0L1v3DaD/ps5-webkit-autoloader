@@ -403,8 +403,10 @@
     try {
       if (picked === 'umtx2') {
         sessionStorage.setItem('on_load_autorun', 'kernel');
+        sessionStorage.setItem('wkal_autoload', 'payload.elf');
       } else {
         sessionStorage.removeItem('on_load_autorun');
+        sessionStorage.removeItem('wkal_autoload');
       }
     } catch (e) { }
 

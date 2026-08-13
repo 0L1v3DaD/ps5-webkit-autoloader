@@ -288,7 +288,7 @@ def main():
 
     # Files that carry the version/badge and get the placeholders replaced:
     # installer page at the dist root, and the versioned autoloader app index.
-    versioned_paths = ("/index.html", app_dir + "/index.html", app_dir + "/umtx2/index.html")
+    versioned_paths = ("/index.html", app_dir + "/index.html")
 
     files = []
     for root, dirs, names in os.walk(dist_dir):
