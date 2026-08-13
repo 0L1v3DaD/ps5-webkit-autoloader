@@ -50,6 +50,12 @@
   var EXPLOIT_MODE = '[[EXPLOIT_MODE]]';
   if (EXPLOIT_MODE.indexOf('[[') === 0) EXPLOIT_MODE = 'auto';
 
+  /* TEST: run the umtx2 chain top-level (window.location.replace) instead of
+     the hidden iframe, so the console behaves exactly like opening umtx2
+     normally. Only affects umtx2 (FW 1.00-5.50); slopkit (9.00-12.00) stays in
+     the iframe. Flip to false to restore normal behavior. */
+  var TOPLEVEL_UMTX2 = true;
+
   /* Firmwares supported by each exploit, keyed on the exact UA firmware
      string (/PlayStation 5/x.xx/). Keep in sync with the exploits' own lists:
      umtx2/document/en/ps5/main.js and slopkit/slopkit/main.js. */
@@ -407,6 +413,14 @@
         sessionStorage.removeItem('on_load_autorun');
       }
     } catch (e) { }
+
+    if (TOPLEVEL_UMTX2 && picked === 'umtx2') {
+      uiLog('Opening umtx2 directly (top-level, no iframe)...', 'info');
+      setTimeout(function () {
+        window.location.replace(EXPLOIT_URL);
+      }, 800);
+      return;
+    }
 
     chainStarted = true;
     clearSlopkitState();
