@@ -107,7 +107,7 @@ def build_zip(frontend_dir, overrides_dir, version, build_time, payload_path=Non
 
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for rel in sorted(file_map.keys()):
-            if rel == "index.html":
+            if rel == "index.html" or rel == "umtx2/index.html":
                 # The autoloader carries version/build-time placeholders in its
                 # title — the PC host serves it at the docroot, so replace them here.
                 with open(file_map[rel], "rb") as f:

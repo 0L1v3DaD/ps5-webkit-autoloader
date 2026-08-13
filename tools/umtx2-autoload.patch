@@ -1,8 +1,6 @@
-diff --git a/main.js b/main.js
-index 9cbb675..d6ddb5a 100644
 --- a/main.js
 +++ b/main.js
-@@ -500,24 +500,21 @@ async function main(userlandRW, wkOnly = false) {
+@@ -500,24 +500,21 @@
      let is_elfldr_running = await probe_sb_elfldr();
      await log("is elfldr running: " + is_elfldr_running, LogLevel.INFO);
      if (wkOnly && !is_elfldr_running) {
@@ -34,7 +32,7 @@ index 9cbb675..d6ddb5a 100644
          if (!response.ok) {
              throw new Error(`Failed to fetch the binary file. Status: ${response.status}`);
          }
-@@ -849,9 +846,9 @@ async function main(userlandRW, wkOnly = false) {
+@@ -849,9 +846,9 @@
              return res;
          }
  
@@ -46,7 +44,7 @@ index 9cbb675..d6ddb5a 100644
                  await parse_elf_store(total_sz);
                  await execute_elf_store();
                  return await wait_for_elf_to_exit();
-@@ -861,7 +858,7 @@ async function main(userlandRW, wkOnly = false) {
+@@ -861,7 +858,7 @@
              }
          }
  
@@ -55,7 +53,7 @@ index 9cbb675..d6ddb5a 100644
              await log(`elfldr listening on ${ip.ip}:9021`, LogLevel.INFO);
              is_elfldr_running = true;
          } else {
-@@ -1182,6 +1179,27 @@ async function main(userlandRW, wkOnly = false) {
+@@ -1182,6 +1179,27 @@
      await new Promise(resolve => setTimeout(resolve, 300));
      await switchPage("payloads-view");
  
@@ -83,7 +81,7 @@ index 9cbb675..d6ddb5a 100644
  
      while (true) {
  
-@@ -1198,7 +1216,7 @@ async function main(userlandRW, wkOnly = false) {
+@@ -1198,7 +1216,7 @@
                      }
                  } else {
                      updateToastMessage(toast, `${payload_info.displayTitle}: Fetching...`);
@@ -92,7 +90,7 @@ index 9cbb675..d6ddb5a 100644
  
                      if (!payload_info.toPort) {
                          if (wkOnly) {
-@@ -1220,11 +1238,19 @@ async function main(userlandRW, wkOnly = false) {
+@@ -1220,11 +1238,19 @@
                          updateToastMessage(toast, `${payload_info.displayTitle}: Sending to port ${payload_info.toPort}...`);
                          await send_buffer_to_port(elf_store, total_sz, payload_info.toPort);
                          updateToastMessage(toast, `${payload_info.displayTitle}: Sent to port ${payload_info.toPort}`);
@@ -112,3 +110,23 @@ index 9cbb675..d6ddb5a 100644
                  setTimeout(removeToast, TOAST_ERROR_TIMEOUT, toast);
                  continue;
              }
+--- a/index.html
++++ b/index.html
+@@ -2,7 +2,7 @@
+ <!-- <html manifest="cache.appcache"> -->
+ 
+ <head>
+-    <title>PS5 UMTX2 Jailbreak</title>
++    <title>WebKit Autoloader v[[VERSION_PLACEHOLDER]] by PLK (built [[BUILD_TIME_PLACEHOLDER]])</title>
+     <meta name="viewport" content="width=device-width, initial-scale=1">
+     <link rel="stylesheet" href="main.css">
+ </head>
+@@ -84,7 +84,7 @@
+             throw reason;
+         });
+         document.getElementById("current-fw").innerHTML = fw_str;
+-        registerAppCacheEventHandlers();
++        // registerAppCacheEventHandlers(); // WKAL: redundant, autoloader manages cache
+         registerL2ButtonHandler();
+         window.onload = function () {
+             let autoload = sessionStorage.getItem(SESSIONSTORE_ON_LOAD_AUTORUN_KEY);
