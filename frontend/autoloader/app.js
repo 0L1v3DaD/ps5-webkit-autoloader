@@ -412,7 +412,9 @@
     } catch (e) { }
 
     chainStarted = true;
-    clearSlopkitState();
+    if (picked === 'slopkit') {
+      clearSlopkitState();
+    }
     try {
       exploitEl.src = EXPLOIT_URL;
     } catch (e) { }
