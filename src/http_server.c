@@ -169,11 +169,17 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
             }
 
             /* Dynamically strip incompatible exploit files from the cache manifest */
-            if (strcmp(url, ROUTE_CACHE_MANIFEST) == 0 && fw > 0.0f) {
-                if (fw <= 5.50f) {
-                    wkali_log("[WKALI] Detected firmware %.2f <= 5.50, caching umtx2 exploit\n", fw);
+            if (strcmp(url, ROUTE_CACHE_MANIFEST) == 0 && (fw > 0.0f || strcmp(WKALI_FORCE_EXPLOIT, "auto") != 0)) {
+                if (strcmp(WKALI_FORCE_EXPLOIT, "umtx2") == 0) {
+                    wkali_log("[WKALI] FORCE_EXPLOIT is set, caching umtx2 exploit\n");
+                } else if (strcmp(WKALI_FORCE_EXPLOIT, "slopkit") == 0) {
+                    wkali_log("[WKALI] FORCE_EXPLOIT is set, caching slopkit exploit\n");
                 } else {
-                    wkali_log("[WKALI] Detected firmware %.2f > 5.50, caching slopkit exploit\n", fw);
+                    if (fw <= 5.50f) {
+                        wkali_log("[WKALI] Detected firmware %.2f <= 5.50, caching umtx2 exploit\n", fw);
+                    } else {
+                        wkali_log("[WKALI] Detected firmware %.2f > 5.50, caching slopkit exploit\n", fw);
+                    }
                 }
 
                 char *filtered = malloc(payload_size + 1);
@@ -192,8 +198,14 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
                         line[copy_len] = '\0';
                         
                         int keep = 1;
-                        if (fw <= 5.50f && strstr(line, "/slopkit/")) keep = 0;
-                        if (fw > 5.50f && strstr(line, "/umtx2/")) keep = 0;
+                        if (strcmp(WKALI_FORCE_EXPLOIT, "umtx2") == 0) {
+                            if (strstr(line, "/slopkit/")) keep = 0;
+                        } else if (strcmp(WKALI_FORCE_EXPLOIT, "slopkit") == 0) {
+                            if (strstr(line, "/umtx2/")) keep = 0;
+                        } else {
+                            if (fw <= 5.50f && strstr(line, "/slopkit/")) keep = 0;
+                            if (fw > 5.50f && strstr(line, "/umtx2/")) keep = 0;
+                        }
                         
                         if (keep) {
                             memcpy(dst, src, line_len);

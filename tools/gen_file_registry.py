@@ -320,6 +320,11 @@ def main():
         out.write("#ifndef FILE_REGISTRY_H\n")
         out.write("#define FILE_REGISTRY_H\n")
         out.write("\n")
+        mode = os.environ.get("FORCE_EXPLOIT", DEFAULT_EXPLOIT_MODE)
+        if mode not in ("auto", "umtx2", "slopkit"):
+            mode = "auto"
+        out.write(f'#define WKALI_FORCE_EXPLOIT "{mode}"\n')
+        out.write("\n")
         out.write("typedef struct {\n")
         out.write("    const char *path;\n")
         out.write("    const unsigned char *data;\n")
