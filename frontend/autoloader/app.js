@@ -144,8 +144,12 @@
       updateProgress(100, 'Autoload finished.');
 
       /* Payload is running as its own process now — unload the iframe to
-         free the memory it held and avoid a browser OOM dialog. */
-      try { exploitEl.src = 'about:blank'; } catch (e) { }
+         free the memory it held and avoid a browser OOM dialog.
+         NOTE: only safe for umtx2; slopkit requires its document to remain
+         open to hold parked racers and fds. */
+      if (exploitMode === 'umtx2') {
+        try { exploitEl.src = 'about:blank'; } catch (e) { }
+      }
     } else {
       uiLog('[ERROR] Autoload failed: ' + (data.why || 'unknown error'), 'error');
       updateProgress(0, 'Autoload failed.');
