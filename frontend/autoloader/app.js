@@ -375,13 +375,6 @@
     uiLog('WebKit Autoloader by PLK', 'success');
     updateProgress(0, 'Waiting to start...');
 
-    /* Always hand off from the splash to the loader view, synchronously: the
-       exploit iframe can raise blocking dialogs (e.g. umtx2's unsupported-
-       firmware alert in a forced build), which would freeze a delayed reveal
-       on the splash forever. The splash still fades out via its own CSS
-       transition. */
-    revealExploit();
-
     window.addEventListener('message', function (event) {
       var data = event.data;
       if (!data || data.type !== 'wkal') return;
@@ -423,6 +416,8 @@
     try {
       exploitEl.src = EXPLOIT_URL;
     } catch (e) { }
+
+    setTimeout(revealExploit, 1500);
   }
 
   window.addEventListener('load', start);
