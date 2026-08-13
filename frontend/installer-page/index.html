@@ -219,8 +219,8 @@
               if (newPosStr) {
                 logPos = parseInt(newPosStr, 10);
               }
-              // Immediately poll again (long-polling)
-              setTimeout(pollLogs, 10);
+              // Add a slight delay before reconnecting to reduce server load
+              setTimeout(pollLogs, 100);
             } else {
               // Server is down or error
               if (completed) return; // Stop polling completely if we finished

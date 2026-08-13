@@ -113,10 +113,12 @@ int main(void) {
     signal(SIGHUP, SIG_IGN);
     signal(SIGTERM, SIG_IGN);
 
-    /* Start the MHD daemon */
-    daemon = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION | MHD_USE_DEBUG,
+    /* Start the MHD daemon using a thread pool to handle concurrent AppCache requests. */
+    daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_DEBUG,
                               WKALI_PORT, NULL, NULL, &http_on_request,
-                              NULL, MHD_OPTION_END);
+                              NULL, 
+                              MHD_OPTION_THREAD_POOL_SIZE, (unsigned int)8,
+                              MHD_OPTION_END);
 
     if (NULL == daemon) {
         wkali_log("[WKALI] Failed to start HTTP daemon!\n");

@@ -65,15 +65,19 @@ else
     exit 1
 fi
 
-# 4. Sanity check: the patched page must carry our integration markers and the
-#    big cat gif must be gone. Catches a silently truncated/empty patch.
+# Strip all unnecessary images to drastically reduce AppCache file count
+find "$DEST" -name "*.png" -delete
+find "$DEST" -name "*.jpg" -delete
+find "$DEST" -name "*.gif" -delete
+
+# 4. Sanity check: the patched page must carry our integration markers.
+#    Catches a silently truncated/empty patch.
 if ! grep -q 'autoload: Q.get("autoload")' slopkit/poops.html \
-    || ! grep -q 'PAYLOAD_MAX_SIZE = 0x400000' slopkit/poops.html \
-    || [ -f slopkit/mmhmm-cats-ps5.gif ]; then
+    || ! grep -q 'PAYLOAD_MAX_SIZE = 0x400000' slopkit/poops.html; then
     echo "Error: slopkit patch verification FAILED — integration markers missing."
     echo "tools/slopkit-autoload.patch is incomplete or out of date."
     echo "Regenerate it from the pristine submodule:"
     echo "  git -C $SOURCE diff > $PATCH"
     exit 1
 fi
-echo "slopkit: patch verification OK (autoload, 4 MiB limit, cat gif removed)."
+echo "slopkit: patch verification OK (autoload, 4 MiB limit). "

@@ -46,6 +46,12 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
     (void)version;
     (void)upload_data;
     (void)upload_data_size;
+    float fw = 0.0f;
+    const char *ua = MHD_lookup_connection_value(conn, MHD_HEADER_KIND, "User-Agent");
+    if (ua) {
+        const char *ps5 = strstr(ua, "PlayStation 5/");
+        if (ps5) fw = strtof(ps5 + 14, NULL);
+    }
 
     /* Handle CORS Preflight (OPTIONS) */
     if (strcmp(method, "OPTIONS") == 0) {
@@ -117,7 +123,7 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
     } else {
         const FileEntry *entry = registry_lookup(url);
         if (entry) {
-            if (strcmp(url, "/") != 0 && strcmp(url, "/index.html") != 0) {
+            if (strcmp(url, "/") != 0 && strcmp(url, "/index.html") != 0 && strcmp(url, "/logs") != 0) {
                 wkali_log("[HTTP] Serving %s (size: %zu)\n", url, entry->size);
             }
             void *payload = (void *)entry->data;
@@ -160,6 +166,49 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
                 payload = decompressed;
                 payload_size = destlen;
                 mem_mode = MHD_RESPMEM_MUST_FREE;
+            }
+
+            /* Dynamically strip incompatible exploit files from the cache manifest */
+            if (strcmp(url, ROUTE_CACHE_MANIFEST) == 0 && fw > 0.0f) {
+                if (fw <= 5.50f) {
+                    wkali_log("[WKALI] Detected firmware %.2f <= 5.50, caching umtx2 exploit\n", fw);
+                } else {
+                    wkali_log("[WKALI] Detected firmware %.2f > 5.50, caching slopkit exploit\n", fw);
+                }
+
+                char *filtered = malloc(payload_size + 1);
+                if (filtered) {
+                    char *src = (char *)payload;
+                    char *dst = filtered;
+                    size_t remaining = payload_size;
+                    
+                    while (remaining > 0) {
+                        char *nl = memchr(src, '\n', remaining);
+                        size_t line_len = nl ? (size_t)(nl - src) + 1 : remaining;
+                        
+                        char line[1024];
+                        size_t copy_len = line_len < sizeof(line) ? line_len : sizeof(line) - 1;
+                        memcpy(line, src, copy_len);
+                        line[copy_len] = '\0';
+                        
+                        int keep = 1;
+                        if (fw <= 5.50f && strstr(line, "/slopkit/")) keep = 0;
+                        if (fw > 5.50f && strstr(line, "/umtx2/")) keep = 0;
+                        
+                        if (keep) {
+                            memcpy(dst, src, line_len);
+                            dst += line_len;
+                        }
+                        
+                        src += line_len;
+                        remaining -= line_len;
+                    }
+                    
+                    if (mem_mode == MHD_RESPMEM_MUST_FREE) free(payload);
+                    payload = filtered;
+                    payload_size = dst - filtered;
+                    mem_mode = MHD_RESPMEM_MUST_FREE;
+                }
             }
 
             resp = MHD_create_response_from_buffer(payload_size, payload,
