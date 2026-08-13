@@ -43,19 +43,18 @@ def repo_root():
 
 
 # slopkit's bundled payload menu servers (ftpsrv, gdbsrv, kstuff, ...) are
-# never used by the autoloader — only the kexp it boots is needed (the elfldr
-# is shared from /app/shared/, see scripts/download_deps.sh). umtx2's bundled
-# payloads are unused too. The copied slopkit/umtx2 are throwaway git repos
-# (tools/apply_*_patch.sh), so .git must never be embedded. The payload digest
-# sidecars (payloads/*.sha256) are build-time bookkeeping and must never be
-# served.
+# never used by the autoloader — only the kexp it boots is needed (slopkit
+# boots the shared elfldr from /app/shared/, see scripts/download_deps.sh).
+# umtx2 keeps its OWN bundled elfldr (umtx2/payloads/elfldr-ps5.elf, like stock
+# umtx2) and its other bundled payloads are pruned by tools/apply_umtx2_patch.sh.
+# The copied slopkit/umtx2 are throwaway git repos (tools/apply_*_patch.sh), so
+# .git must never be embedded. The payload digest sidecars (payloads/*.sha256)
+# are build-time bookkeeping and must never be served.
 def include_in_zip(rel):
     if "/.git/" in rel or rel.endswith("/.git"):
         return False
     if rel.startswith("slopkit/payloads/"):
         return rel.endswith("kexp_2026_05_25.bin")
-    if rel.startswith("umtx2/payloads/"):
-        return False
     if rel == "slopkit/readme.png":
         return False
     if rel.endswith(".sha256"):

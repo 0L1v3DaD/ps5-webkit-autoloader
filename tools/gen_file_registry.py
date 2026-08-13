@@ -53,15 +53,17 @@ def detect_content_type(path):
 
 # slopkit ships its own payload menu servers (ftpsrv, gdbsrv, kstuff, ...) that
 # our autoloader never uses — the chain only needs the elfldr it boots and the
-# kexp shellcode that loads it. The elfldr is now shared (served from
+# kexp shellcode that loads it. slopkit boots the shared elfldr (served from
 # /app/<version>/shared/elfldr-ps5.elf, see scripts/download_deps.sh), so only
-# the kexp is kept. umtx2's bundled payloads are unused too (the autoload
-# payload comes from /app/<version>/payloads/ and the shared elfldr from
-# /app/<version>/shared/). readme.png is a slopkit repo asset, also unused. The
-# copied slopkit is a throwaway git repo (tools/apply_slopkit_patch.sh), so .git
-# must never be embedded. The payload digest sidecars (payloads/*.sha256) are
-# build-time bookkeeping and must never be served. /VERSION is the staging
-# version handoff (see Makefile) — build-time bookkeeping too.
+# the kexp is kept. umtx2 boots its OWN bundled elfldr (kept by
+# tools/apply_umtx2_patch.sh at umtx2/payloads/elfldr-ps5.elf, like stock
+# umtx2); the rest of its payloads are pruned, and the autoload payload comes
+# from /app/<version>/payloads/. readme.png is a slopkit repo asset, also
+# unused. The copied slopkit is a throwaway git repo
+# (tools/apply_slopkit_patch.sh), so .git must never be embedded. The payload
+# digest sidecars (payloads/*.sha256) are build-time bookkeeping and must never
+# be served. /VERSION is the staging version handoff (see Makefile) — build-time
+# bookkeeping too.
 def include_in_registry(path):
     if "/.git/" in path or path.endswith("/.git"):
         return False
@@ -69,8 +71,6 @@ def include_in_registry(path):
         return False
     if "/slopkit/payloads/" in path:
         return path.endswith("kexp_2026_05_25.bin")
-    if "/umtx2/payloads/" in path:
-        return False
     if "/slopkit/readme.png" in path:
         return False
     if path.endswith(".sha256"):

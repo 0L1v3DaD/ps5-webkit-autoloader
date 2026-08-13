@@ -57,8 +57,10 @@ instead of the unified-autoloader — so this flow installs the homescreen app.
   and summary verdicts) and receives the `?autoload` result via `postMessage`.
 
 `payload.elf` is a virtual name: the PC host serves the installer ELF there, the homescreen app
-serves the real unified-autoloader. Both exploits autoload the same `payload.elf` and boot the
-same **shared elfldr** (under `/app/<version>/shared/elfldr-ps5.elf` in the cached layout).
+serves the real unified-autoloader. Both exploits autoload the same `payload.elf`. umtx2 (FW
+1.00–5.50) boots its **own bundled elfldr** (`/app/<version>/umtx2/payloads/elfldr-ps5.elf`, kept
+from the umtx2 submodule like stock umtx2); slopkit (9.00–12.00) boots the **shared elfldr**
+(`/app/<version>/shared/elfldr-ps5.elf`).
 
 ## Native installer (`src/`)
 
@@ -155,11 +157,12 @@ offsets cache-bust fallback in `tools/gen_file_registry.py` (`?v=19`) and the if
 (flattened to the copy root, so the exploit serves at `/app/umtx2/`) to the gitignored
 `frontend/autoloader/umtx2/` and applies `tools/umtx2-autoload.patch` there
 (`tools/apply_umtx2_patch.sh`, run automatically by the Makefile). The bundled payloads dir is
-pruned — the exploit uses the shared elfldr.
+pruned down to `elfldr-ps5.elf` — umtx2 boots its **own** elfldr, exactly like stock umtx2.
 
 The patch (in `umtx2/main.js`):
 
-- Loads the **shared elfldr** from `../shared/elfldr-ps5.elf` instead of `payloads/elfldr-ps5.elf`.
+- Keeps `load_local_elf("elfldr-ps5.elf")` loading umtx2's own `payloads/elfldr-ps5.elf` (stock
+  behavior; the shared elfldr is only used by slopkit).
 - Adds an optional `base` parameter to `load_payload_into_elf_store_from_local_file` and
   `load_local_elf` so different base paths can be used without duplicating the fetch logic.
 - Threads `payload_info.wkalBase` through the main loop's fetch call, so the payload is
@@ -178,11 +181,12 @@ re-run the script, and regenerate `tools/umtx2-autoload.patch` if it no longer a
 
 ## Shared elfldr
 
-Both exploits boot the same elfldr, served at `/app/shared/elfldr-ps5.elf` (staged from
-`frontend/autoloader/shared/`). `scripts/download_deps.sh` fetches it from the pinned
+slopkit boots the **shared** elfldr, served at `/app/<version>/shared/elfldr-ps5.elf` (staged
+from `frontend/autoloader/shared/`). `scripts/download_deps.sh` fetches it from the pinned
 `itsPLK/ps5-elfldr` release (tag `ELFLDR_TAG`), sha256-verifies it, and caches the digest in a
-`.sha256` sidecar so offline rebuilds work. Future shared chain binaries (e.g. a kexp) can live
-in the versioned `/app/<version>/shared/` dir too.
+`.sha256` sidecar so offline rebuilds work. umtx2 (FW 1.00–5.50) boots its **own** elfldr from
+the umtx2 submodule instead, matching stock umtx2 behavior. Future shared chain binaries
+(e.g. a kexp) can live in the versioned `/app/<version>/shared/` dir too.
 
 ## Payload dependency
 

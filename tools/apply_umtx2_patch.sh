@@ -7,8 +7,8 @@
 #   1. copies third_party/umtx2/document/en/ps5 -> frontend/autoloader/umtx2
 #      (flattened: the exploit's document/en/ps5 dir becomes the copy root, so
 #      the iframe URL is the short /app/umtx2/index.html)
-#   2. prunes the bundled payloads dir (the shared elfldr from /app/shared/
-#      replaces umtx2's own elfldr, and the payload menu is unused)
+#   2. prunes the bundled payloads dir down to just elfldr-ps5.elf (the chain
+#      boots its own elfldr like stock umtx2; the payload menu is unused)
 #   3. applies tools/umtx2-autoload.patch to the copy
 #
 # The copy is gitignored (frontend/autoloader/umtx2/), so the submodule is
@@ -37,13 +37,16 @@ if [ ! -f "$PATCH" ]; then
     exit 1
 fi
 
-# 1. Fresh copy of the exploit root (document/en/ps5), flattened. The bundled
-#    payloads are unused (the autoload payload comes from /app/payloads/ and
-#    the shared elfldr from /app/shared/), so prune them here.
+# 1. Fresh copy of the exploit root (document/en/ps5), flattened. Prune the
+#    bundled payloads dir down to umtx2's own elfldr-ps5.elf (like stock umtx2)
+#    — the autoload payload comes from /app/payloads/ and the payload menu is
+#    unused, but the chain boots its own elfldr, not the shared one.
 rm -rf "$DEST"
 mkdir -p "$DEST"
 cp -R "$SOURCE/document/en/ps5"/. "$DEST"/
 rm -rf "$DEST/payloads"
+mkdir -p "$DEST/payloads"
+cp "$SOURCE/document/en/ps5/payloads/elfldr-ps5.elf" "$DEST/payloads/"
 
 # 2. Turn the copy into a throwaway git repo so `git apply` can handle the
 #    patch. Two commits: pristine umtx2, then our autoloader patch.
@@ -70,16 +73,20 @@ else
     exit 1
 fi
 
-# 4. Sanity check: the patched main.js must carry our integration markers and
-#    the bundled payloads dir must be gone. Catches a silently truncated patch.
+# 4. Sanity check: the patched main.js must carry our integration markers, the
+#    elfldr must come from the bundled payloads dir (stock umtx2, not the shared
+#    one), the confirm() dialogs must be gone, and payloads/ must contain only
+#    elfldr-ps5.elf. Catches a silently truncated patch.
 if ! grep -q 'wkalAutoloadName = new URLSearchParams' main.js \
     || ! grep -q 'wkalAutoload' main.js \
-    || ! grep -q '../shared/' main.js \
+    || ! grep -q 'load_local_elf("elfldr-ps5.elf")' main.js \
     || grep -q 'confirm(' main.js \
-    || [ -d payloads ]; then
+    || grep -q '../shared/' main.js \
+    || ! [ -f payloads/elfldr-ps5.elf ] \
+    || [ "$(find payloads -maxdepth 1 -type f | wc -l)" -ne 1 ]; then
     echo "Error: umtx2 patch verification FAILED — integration markers missing."
     echo "tools/umtx2-autoload.patch is incomplete or out of date."
     echo "Regenerate it from the pristine submodule and re-run."
     exit 1
 fi
-echo "umtx2: patch verification OK (mainloop autoload, shared elfldr, confirm removed, payloads pruned)."
+echo "umtx2: patch verification OK (mainloop autoload, own elfldr, confirm removed, payloads pruned)."

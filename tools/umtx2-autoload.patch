@@ -44,15 +44,6 @@
                  await parse_elf_store(total_sz);
                  await execute_elf_store();
                  return await wait_for_elf_to_exit();
-@@ -861,7 +858,7 @@
-             }
-         }
- 
--        if (await load_local_elf("elfldr-ps5.elf") == 0) {
-+        if (await load_local_elf("elfldr-ps5.elf", "../shared/") == 0) {
-             await log(`elfldr listening on ${ip.ip}:9021`, LogLevel.INFO);
-             is_elfldr_running = true;
-         } else {
 @@ -1182,6 +1179,27 @@
      await new Promise(resolve => setTimeout(resolve, 300));
      await switchPage("payloads-view");
