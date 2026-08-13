@@ -241,6 +241,7 @@ def build_manifest(files, version, build_time, app_dir, pointer_path, marker_pat
         "NETWORK:",
         "/install",
         "/version",
+        "/logs",
         "",
         "FALLBACK:",
         "/ /index.html",

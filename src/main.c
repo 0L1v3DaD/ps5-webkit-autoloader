@@ -139,8 +139,13 @@ int main(void) {
         usleep(100000); /* 100ms sleep */
     }
 
-    wkali_log("[WKALI] Shutting down...\n");
     wkali_notify("WebKit Autoloader v%s cached successfully!", WKAL_FULL_VERSION);
+    wkali_log_wakeup();
+
+    /* Give the /logs thread half a second to wake up and flush the final logs 
+     * over the network before we aggressively kill the MHD daemon and all sockets. */
+    usleep(500000); 
+
     if (daemon)
         MHD_stop_daemon(daemon);
 

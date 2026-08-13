@@ -77,7 +77,7 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
          * server stays up and the page tells the user to re-run the installer. */
         int err = wkali_install_app_if_needed();
         if (err == 0) {
-            wkali_log("[WKALI] App installed. Shutting down...\n");
+            wkali_log("[WKALI] App installed. Stopping server...\n");
             resp = MHD_create_response_from_buffer(strlen("OK"), (void *)"OK",
                                                    MHD_RESPMEM_PERSISTENT);
             MHD_add_response_header(resp, "Content-Type", "text/plain");
@@ -96,9 +96,30 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
                                                (void *)WKAL_FULL_VERSION,
                                                MHD_RESPMEM_PERSISTENT);
         MHD_add_response_header(resp, "Content-Type", "text/plain");
+    } else if (strcmp(url, "/logs") == 0) {
+        const char *pos_str = MHD_lookup_connection_value(conn, MHD_GET_ARGUMENT_KIND, "pos");
+        size_t pos = 0;
+        if (pos_str) pos = (size_t)strtoull(pos_str, NULL, 10);
+
+        char *logs = malloc(16384 + 64);
+        if (logs) {
+            size_t copied = wkali_wait_logs(&pos, logs, 16384);
+            /* Append the new pos as an HTTP header so the client knows */
+            resp = MHD_create_response_from_buffer(copied, (void *)logs, MHD_RESPMEM_MUST_FREE);
+            char pos_hdr[64];
+            snprintf(pos_hdr, sizeof(pos_hdr), "%zu", pos);
+            MHD_add_response_header(resp, "X-Log-Pos", pos_hdr);
+            MHD_add_response_header(resp, "Content-Type", "text/plain");
+        } else {
+            const char *oom = "500 Internal Server Error\n";
+            resp = MHD_create_response_from_buffer(strlen(oom), (void *)oom, MHD_RESPMEM_PERSISTENT);
+        }
     } else {
         const FileEntry *entry = registry_lookup(url);
         if (entry) {
+            if (strcmp(url, "/") != 0 && strcmp(url, "/index.html") != 0) {
+                wkali_log("[HTTP] Serving %s (size: %zu)\n", url, entry->size);
+            }
             void *payload = (void *)entry->data;
             size_t payload_size = entry->size;
             enum MHD_ResponseMemoryMode mem_mode = MHD_RESPMEM_PERSISTENT;
