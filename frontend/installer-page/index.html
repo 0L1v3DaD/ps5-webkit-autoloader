@@ -246,12 +246,16 @@
 
       function setInstalled() {
         statusEl.textContent = 'Installed successfully';
+        statusEl.style.color = '#22c55e';
+        progressBar.style.background = '-webkit-linear-gradient(90deg, #16a34a 0%, #22c55e 100%)';
         detailEl.textContent = 'The WebKit Autoloader shortcut is now on your PS5 homescreen. You can close this page.';
         setProgress(100);
       }
 
       function setFailed() {
         statusEl.textContent = 'Install failed';
+        statusEl.style.color = '#ef4444';
+        progressBar.style.background = '-webkit-linear-gradient(90deg, #dc2626 0%, #ef4444 100%)';
         detailEl.textContent = 'The app could not be installed. Close this page and re-run the installer.';
       }
 
