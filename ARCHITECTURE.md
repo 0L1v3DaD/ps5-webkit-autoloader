@@ -8,7 +8,7 @@ selected by firmware:
 - **slopkit** (FW **9.00–12.00**) — the slopkit exploit chain.
 
 Both converge on the same result: a `WKAL00001` homescreen app that runs the
-exploit, boots a **shared elfldr**, and autoloads your payload through it.
+exploit, boots elfldr, and autoloads your payload through it.
 
 ## Repository layout
 

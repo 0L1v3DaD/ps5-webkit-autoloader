@@ -3,14 +3,10 @@
 </p>
 <h1 align="center">PS5 WebKit Autoloader</h1>
 &nbsp;
-<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>1.00&ndash;5.50</b> (umtx2) and <b>9.00&ndash;12.00</b> (slopkit).</p>
+<p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>1.00&ndash;5.50</b> and <b>9.00&ndash;12.00</b>.</p>
 
 > [!NOTE]
-> Uses the [umtx2](https://github.com/idlesauce/umtx2) WebKit exploit (FW 1.00–5.50) and an early
-> release of the [slopkit](https://github.com/jordyidk/slopkit) WebKit exploit (FW 9.00–12.00)
-> under the hood, each with minimal changes (via their patch files in `tools/`), so stability
-> should match the originals. Keep in mind that reliability can vary across firmwares, and it may
-> not be suitable for everyday usage yet.
+> Uses the [umtx2](https://github.com/idlesauce/umtx2) (FW 1.00–5.50) and [slopkit](https://github.com/jordyidk/slopkit) (FW 9.00–12.00) WebKit exploits under the hood with minimal changes (via patch files in `tools/`), so stability should match the originals.
 
 <p align="center">
     <b>Other Autoloaders:</b><br>
@@ -91,7 +87,7 @@ The latest installer payload will re-create the homescreen app and refresh the c
 <Details>
 <Summary><i>How to use a custom ELF Loader?</i></Summary>
 
-By default, the autoloader uses a custom version of **elfldr** that only accepts connections from the PS5 itself (localhost). This improves security by preventing other devices on your network from sending payloads to your console.
+On firmwares 9.00–12.00 (slopkit), the autoloader uses a custom version of **elfldr** that only accepts connections from the PS5 itself (localhost). This improves security by preventing unauthorized devices on your network from sending payloads to your console. On firmwares 1.00–5.50 (umtx2), the stock elfldr is booted.
 
 If you want to use a "normal" ELF Loader that allows sending payloads from any device, you can simply load it through **Payload Manager**.
 

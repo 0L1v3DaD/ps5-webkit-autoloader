@@ -40,8 +40,8 @@ cp -R "$SOURCE"/. "$DEST"/
 rm -rf "$DEST/.git" "$DEST/.github" "$DEST/.gitignore" "$DEST/.gitmodules"
 
 # 2. Turn the copy into a throwaway git repo so `git apply` can handle binary
-#    diffs (e.g. the deleted cat gif) — plain git apply on a non-repo dir
-#    cannot. Two commits: pristine slopkit, then our autoloader patch.
+#    diffs / patch chunks — plain git apply on a non-repo dir cannot.
+#    Two commits: pristine slopkit, then our autoloader patch.
 SRC_HASH=$(git -C "$SOURCE" rev-parse --short HEAD)
 git -C "$DEST" init -q
 git -C "$DEST" config user.name "wkal"
