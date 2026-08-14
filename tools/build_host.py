@@ -44,7 +44,7 @@ def repo_root():
 
 # slopkit's bundled payload menu servers (ftpsrv, gdbsrv, kstuff, ...) are
 # never used by the autoloader — only the kexp it boots is needed (slopkit
-# boots the shared elfldr from /app/shared/, see scripts/download_deps.sh).
+# boots the shared elfldr from /app/shared/, see tools/download_deps.sh).
 # umtx2 keeps its OWN bundled elfldr (umtx2/payloads/elfldr-ps5.elf, like stock
 # umtx2) and its other bundled payloads are pruned by tools/apply_umtx2_patch.sh.
 # The copied slopkit/umtx2 are throwaway git repos (tools/apply_*_patch.sh), so

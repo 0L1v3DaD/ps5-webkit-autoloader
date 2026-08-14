@@ -54,7 +54,7 @@ def detect_content_type(path):
 # slopkit ships its own payload menu servers (ftpsrv, gdbsrv, kstuff, ...) that
 # our autoloader never uses — the chain only needs the elfldr it boots and the
 # kexp shellcode that loads it. slopkit boots the shared elfldr (served from
-# /app/<version>/shared/elfldr-ps5.elf, see scripts/download_deps.sh), so only
+# /app/<version>/shared/elfldr-ps5.elf, see tools/download_deps.sh), so only
 # the kexp is kept. umtx2 boots its OWN bundled elfldr (kept by
 # tools/apply_umtx2_patch.sh at umtx2/payloads/elfldr-ps5.elf, like stock
 # umtx2); the rest of its payloads are pruned, and the autoload payload comes
@@ -179,7 +179,7 @@ def slopkit_iframe_url(app_dir):
 
 # umtx2 auto-runs its chain on load via the 'on_load_autorun' sessionStorage
 # key set by app.js; the URL carries the autoload payload name + a cache-bust
-# that must be bumped together with the umtx2 patch (tools/umtx2-autoload.patch).
+# that must be bumped together with the umtx2 patch (patches/umtx2-autoload.patch).
 # Keep in sync with UMTX2_URL in frontend/autoloader/app.js.
 def umtx2_iframe_url(app_dir):
     return app_dir + "/umtx2/index.html?autoload=payload.elf&v=1"

@@ -90,12 +90,12 @@ umtx2-prepare:
 	./tools/apply_umtx2_patch.sh
 
 # Fetch the shared elfldr + the bundled ps5-unified-autoloader payload ELF from
-# their pinned GitHub releases (scripts/download_deps.sh). Idempotent: skips when
+# their pinned GitHub releases (tools/download_deps.sh). Idempotent: skips when
 # the binaries are already present and verified, so offline rebuilds still work.
 .PHONY: payload-deps
 payload-deps:
 	@echo "Fetching shared elfldr + unified-autoloader payload..."
-	./scripts/download_deps.sh
+	./tools/download_deps.sh
 
 $(FILE_REGISTRY_STAMP): $(FRONTEND_FILES) version icons slopkit-prepare umtx2-prepare payload-deps
 	@echo "Staging frontend into $(FRONTEND_STAGE)/..."

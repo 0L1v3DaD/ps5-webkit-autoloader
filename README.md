@@ -6,7 +6,7 @@
 <p align="center">Automatically loads the WebKit exploit and your elf payloads.<br>Supports firmwares <b>1.00&ndash;5.50</b> and <b>9.00&ndash;12.00</b>.</p>
 
 > [!NOTE]
-> Uses the [umtx2](https://github.com/idlesauce/umtx2) (FW 1.00–5.50) and [slopkit](https://github.com/jordyidk/slopkit) (FW 9.00–12.00) WebKit exploits under the hood with minimal changes (via patch files in `tools/`), so stability should match the originals.
+> Uses the [umtx2](https://github.com/idlesauce/umtx2) (FW 1.00–5.50) and [slopkit](https://github.com/jordyidk/slopkit) (FW 9.00–12.00) WebKit exploits under the hood with minimal changes (via patch files in `patches/`), so stability should match the originals.
 
 <p align="center">
     <b>Other Autoloaders:</b><br>

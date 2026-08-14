@@ -20,8 +20,8 @@ exploit, boots elfldr, and autoloads your payload through it.
 | `pc-host/` | The PC host script (`host.py`) + overrides for the bootstrap flow |
 | `src/` | Native installer ELF (HTTP server, app installer, browser launcher) |
 | `include/` | Headers, incl. generated `wkali_version.h` and `file_registry.{h,c}` |
-| `tools/` | Build/version/icon/registry scripts + the slopkit/umtx2 patches |
-| `scripts/` | Dependency download (`download_deps.sh`) |
+| `patches/` | The slopkit and umtx2 autoloader patch files |
+| `tools/` | Build, version, icon, registry scripts, and dependency downloader |
 | `assets/` | Icon source and PS5 app metadata templates |
 | `third_party/` | `slopkit`, `umtx2`, `ps5-elfldr` and `ps5-unified-autoloader` submodules (pinned) |
 
@@ -129,7 +129,7 @@ dev server.
 ## Slopkit integration
 
 `slopkit` is a pinned, **pristine** submodule. The build copies it to the gitignored
-`frontend/autoloader/slopkit/` and applies `tools/slopkit-autoload.patch` there
+`frontend/autoloader/slopkit/` and applies `patches/slopkit-autoload.patch` there
 (`tools/apply_slopkit_patch.sh`, run automatically by the Makefile).
 
 The patch (in `slopkit/slopkit/poops.html` and `slopkit/slopkit/poops.js`):
@@ -146,7 +146,7 @@ The patch (in `slopkit/slopkit/poops.html` and `slopkit/slopkit/poops.js`):
 
 To update slopkit: `git -C third_party/slopkit fetch && git -C third_party/slopkit checkout <commit>`,
 re-run the script, and regenerate the patch if it no longer applies
-(`git -C <scratch copy> diff --cached --full-index > tools/slopkit-autoload.patch`). Keep the
+(`git -C <scratch copy> diff --cached --full-index > patches/slopkit-autoload.patch`). Keep the
 offsets cache-bust fallback in `tools/gen_file_registry.py` and the iframe URLs in
 `app.js`/`gen_file_registry.py` in sync with upstream's `ROUTE_VERSION`.
 
@@ -154,7 +154,7 @@ offsets cache-bust fallback in `tools/gen_file_registry.py` and the iframe URLs 
 
 `umtx2` is a pinned, **pristine** submodule. The build copies its `document/en/ps5` directory
 (flattened to the copy root, so the exploit serves at `/app/umtx2/`) to the gitignored
-`frontend/autoloader/umtx2/` and applies `tools/umtx2-autoload.patch` there
+`frontend/autoloader/umtx2/` and applies `patches/umtx2-autoload.patch` there
 (`tools/apply_umtx2_patch.sh`, run automatically by the Makefile). The bundled payloads dir is
 pruned down to `elfldr-ps5.elf` — umtx2 boots its **own** elfldr, exactly like stock umtx2.
 
@@ -175,13 +175,13 @@ The patch (in `umtx2/main.js`):
 - Neutralizes the `confirm()` dialogs around the elfldr probe so the chain runs unattended.
 
 To update umtx2: `git -C third_party/umtx2 fetch && git -C third_party/umtx2 checkout <commit>`,
-re-run the script, and regenerate `tools/umtx2-autoload.patch` if it no longer applies. Keep the
+re-run the script, and regenerate `patches/umtx2-autoload.patch` if it no longer applies. Keep the
 `?v=` cache-buster on `UMTX2_IFRAME_URL` in `app.js`/`gen_file_registry.py` in sync.
 
 ## Shared elfldr
 
 slopkit boots the **shared** elfldr, served at `/app/<version>/shared/elfldr-ps5.elf` (staged
-from `frontend/autoloader/shared/`). `scripts/download_deps.sh` fetches it from the pinned
+from `frontend/autoloader/shared/`). `tools/download_deps.sh` fetches it from the pinned
 `itsPLK/ps5-elfldr` release (tag `ELFLDR_TAG`), sha256-verifies it, and caches the digest in a
 `.sha256` sidecar so offline rebuilds work. umtx2 (FW 1.00–5.50) boots its **own** elfldr from
 the umtx2 submodule instead, matching stock umtx2 behavior. Future shared chain binaries
@@ -189,7 +189,7 @@ the umtx2 submodule instead, matching stock umtx2 behavior. Future shared chain 
 
 ## Payload dependency
 
-`scripts/download_deps.sh` (the Makefile's `payload-deps` target) downloads
+`tools/download_deps.sh` (the Makefile's `payload-deps` target) downloads
 `frontend/autoloader/payloads/payload.elf` from the `ps5-unified-autoloader` submodule's pinned
 GitHub release, sha256-verifies it, and caches the digest in a `.sha256` sidecar so offline
 rebuilds work. Bump the submodule to pick up a newer release.

@@ -9,7 +9,7 @@
 #      the iframe URL is the short /app/umtx2/index.html)
 #   2. prunes the bundled payloads dir down to just elfldr-ps5.elf (the chain
 #      boots its own elfldr like stock umtx2; the payload menu is unused)
-#   3. applies tools/umtx2-autoload.patch to the copy
+#   3. applies patches/umtx2-autoload.patch to the copy
 #
 # The copy is gitignored (frontend/autoloader/umtx2/), so the submodule is
 # never dirtied. Run after every submodule update:
@@ -24,7 +24,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE="$ROOT/third_party/umtx2"
 DEST="$ROOT/frontend/autoloader/umtx2"
-PATCH="$ROOT/tools/umtx2-autoload.patch"
+PATCH="$ROOT/patches/umtx2-autoload.patch"
 
 if [ ! -e "$SOURCE/.git" ]; then
     echo "Error: umtx2 submodule is not initialised."
@@ -68,7 +68,7 @@ elif git apply --reverse --check "$PATCH" 2>/dev/null; then
     echo "umtx2: autoloader patch is already applied."
 else
     echo "Error: patch does not apply cleanly to $DEST."
-    echo "umtx2 has likely changed upstream — regenerate tools/umtx2-autoload.patch:"
+    echo "umtx2 has likely changed upstream — regenerate patches/umtx2-autoload.patch:"
     echo "  git -C $SOURCE diff > $PATCH"
     exit 1
 fi
@@ -85,7 +85,7 @@ if ! grep -q 'wkalAutoloadName = new URLSearchParams' main.js \
     || ! [ -f payloads/elfldr-ps5.elf ] \
     || [ "$(find payloads -maxdepth 1 -type f | wc -l)" -ne 1 ]; then
     echo "Error: umtx2 patch verification FAILED — integration markers missing."
-    echo "tools/umtx2-autoload.patch is incomplete or out of date."
+    echo "patches/umtx2-autoload.patch is incomplete or out of date."
     echo "Regenerate it from the pristine submodule and re-run."
     exit 1
 fi

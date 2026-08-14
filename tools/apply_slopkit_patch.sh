@@ -5,7 +5,7 @@
 # modified). The frontend needs it under frontend/autoloader/slopkit, so this
 # script:
 #   1. copies third_party/slopkit -> frontend/autoloader/slopkit (fresh copy)
-#   2. applies tools/slopkit-autoload.patch to the copy
+#   2. applies patches/slopkit-autoload.patch to the copy
 #
 # The copy is gitignored (frontend/autoloader/slopkit/), so the submodule is
 # never dirtied. Run after every submodule update:
@@ -20,7 +20,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE="$ROOT/third_party/slopkit"
 DEST="$ROOT/frontend/autoloader/slopkit"
-PATCH="$ROOT/tools/slopkit-autoload.patch"
+PATCH="$ROOT/patches/slopkit-autoload.patch"
 
 if [ ! -e "$SOURCE/.git" ]; then
     echo "Error: slopkit submodule is not initialised."
@@ -60,7 +60,7 @@ elif git apply --reverse --check "$PATCH" 2>/dev/null; then
     echo "slopkit: autoloader patch is already applied."
 else
     echo "Error: patch does not apply cleanly to $DEST."
-    echo "slopkit has likely changed upstream — regenerate tools/slopkit-autoload.patch:"
+    echo "slopkit has likely changed upstream — regenerate patches/slopkit-autoload.patch:"
     echo "  git -C $SOURCE diff > $PATCH"
     exit 1
 fi
@@ -73,7 +73,7 @@ if ! grep -q 'sendPayloadToElfldr(cfg.autoload, "../../payloads/"' slopkit/poops
     || ! grep -q 'name: "payload.elf"' slopkit/poops.html \
     || ! grep -q '"url=../../shared/" + name' slopkit/poops.js; then
     echo "Error: slopkit patch verification FAILED — integration markers missing."
-    echo "tools/slopkit-autoload.patch is incomplete or out of date."
+    echo "patches/slopkit-autoload.patch is incomplete or out of date."
     echo "Regenerate it from the pristine submodule:"
     echo "  git -C $SOURCE diff > $PATCH"
     exit 1
