@@ -138,18 +138,17 @@ The patch (in `slopkit/slopkit/poops.html` and `slopkit/slopkit/poops.js`):
   `../../payloads/`. Upstream's `exactQuery()` (which refuses non-canonical URLs) is relaxed to
   tolerate the extra `autoload` query key, and the iframe URL is the canonical production query
   (`go=1&auto=1&production=1&trigger=netcontrol&attempts=8&only=<full ladder>&log=debug&payload=1`)
-  plus `autoload=payload.elf&v=41`.
-- A hidden menu tile so `payloadIsListed()` accepts the payload.
+  plus `autoload=payload.elf&v=final`.
+- A hidden `payload.elf` entry in slopkit's `PAYLOADS` list so `payloadIsListed()` accepts it.
 - Posts `{type:"wkal", kind:"autoload", ok, bytes}` to the parent page.
-- Removes the ~1 MB cat gif.
 - Loads the **shared elfldr** from `../../shared/elfldr-ps5.elf` instead of its bundled copy
   (the kexp shellcode stays slopkit's own — it is firmware-specific).
 
 To update slopkit: `git -C third_party/slopkit fetch && git -C third_party/slopkit checkout <commit>`,
 re-run the script, and regenerate the patch if it no longer applies
 (`git -C <scratch copy> diff --cached --full-index > tools/slopkit-autoload.patch`). Keep the
-offsets cache-bust fallback in `tools/gen_file_registry.py` (`?v=19`) and the iframe URLs in
-`app.js`/`gen_file_registry.py` in sync.
+offsets cache-bust fallback in `tools/gen_file_registry.py` and the iframe URLs in
+`app.js`/`gen_file_registry.py` in sync with upstream's `ROUTE_VERSION`.
 
 ## Umtx2 integration
 

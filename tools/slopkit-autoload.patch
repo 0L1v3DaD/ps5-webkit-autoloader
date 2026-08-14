@@ -1,16 +1,8 @@
 diff --git a/slopkit/poops.html b/slopkit/poops.html
-index eb01cd3..ce60b95 100644
+index df80712..55734ad 100644
 --- a/slopkit/poops.html
 +++ b/slopkit/poops.html
-@@ -209,6 +209,7 @@
-     <a class="payloadTile" href="#" data-name="websrv-ps5.elf" data-key="web"><img data-src="../ui/payload-web-default.png" alt=""></a>
-     <a class="payloadTile" href="#" data-name="kstuff.elf" data-key="kstuff"><img data-src="../ui/payload-kstuff-default.png" alt="KStuff"></a>
-     <a class="payloadTile" href="#" data-name="PLK.elf" data-key="plk"><img data-src="../ui/payload-plk-default.png" alt="PLK PLD Manager"></a>
-+    <a class="payloadTile" href="#" data-name="payload.elf" data-key="autoload" style="display:none"><img data-src="../ui/payload-shell-default.png" alt=""></a>
-   </div>
- </div>
- <div id="nav"></div>
-@@ -353,6 +354,7 @@ const DEFAULT_ATTEMPTS = TRIGGER === "overflow" ? 96
+@@ -535,6 +535,7 @@ const DEFAULT_ATTEMPTS = TRIGGER === "overflow" ? 96
  const cfg = {
  
      payload: Q.get("payload") || "",
@@ -18,7 +10,7 @@ index eb01cd3..ce60b95 100644
      trigger: TRIGGER,
      burn: BURN,
      netprobe: Q.get("netprobe") === "1",
-@@ -404,6 +406,7 @@ function exactQuery(expected) {
+@@ -595,6 +596,7 @@ function exactQuery(expected) {
      const keys = Object.keys(expected);
      let count = 0, exact = true;
      Q.forEach((value, key) => {
@@ -26,7 +18,26 @@ index eb01cd3..ce60b95 100644
          count++;
          if (!Object.prototype.hasOwnProperty.call(expected, key)
              || expected[key] !== value) exact = false;
-@@ -840,7 +843,7 @@ function preparePayloadSender() {
+@@ -986,7 +988,9 @@ const PAYLOADS = Object.freeze([
+     { title: "PLK Manager", description: "Payload management tools.",
+         name: "PLK.elf", info: "PLK.elf - PLK" },
+     { title: "ShadowMountPlus", description: "Mount and manage game images.",
+-        name: "shadowmountplus.elf", info: "shadowmountplus.elf - Drakmor" }
++        name: "shadowmountplus.elf", info: "shadowmountplus.elf - Drakmor" },
++    { title: "WKAL autoload", description: "", name: "payload.elf",
++        info: "payload.elf", hidden: true }
+ ]);
+ 
+ function populatePayloadButtons() {
+@@ -1019,6 +1023,7 @@ function populatePayloadButtons() {
+         button.appendChild(title);
+         button.appendChild(description);
+         button.appendChild(info);
++        if (payload.hidden) button.style.display = "none";
+         button.addEventListener("click", function (event) {
+             if (event && event.preventDefault) event.preventDefault();
+             sendPayloadInPlace(payload.name, button);
+@@ -1238,7 +1243,7 @@ function preparePayloadSender() {
      }
  }
  
@@ -35,7 +46,7 @@ index eb01cd3..ce60b95 100644
      if (!elfldrSpawned)
          throw new Error("ELF loader is not ready");
      if (!P || !chain)
-@@ -852,7 +855,7 @@ async function sendPayloadToElfldr(name) {
+@@ -1250,7 +1255,7 @@ async function sendPayloadToElfldr(name) {
      if (!payloadIsListed(name))
          throw new Error("payload is not listed in this menu");
  
@@ -44,19 +55,10 @@ index eb01cd3..ce60b95 100644
          { cache: "no-store" });
      if (!response.ok)
          throw new Error("payload fetch failed: HTTP " + response.status);
-@@ -860,7 +863,7 @@ async function sendPayloadToElfldr(name) {
-     if (!bytes.length)
-         throw new Error("payload is empty");
-     if (bytes.length > PAYLOAD_MAX_SIZE)
--        throw new Error("payload is larger than the 2 MiB limit");
-+        throw new Error("payload is larger than the " + (PAYLOAD_MAX_SIZE / 1048576) + " MiB limit");
-     if (bytes.length < 4 || bytes[0] !== 0x7f || bytes[1] !== 0x45
-         || bytes[2] !== 0x4c || bytes[3] !== 0x46)
-         throw new Error("payload does not start with the ELF signature");
-@@ -1771,6 +1774,20 @@ async function runLadder() {
+@@ -2189,6 +2194,20 @@ async function runLadder() {
          flushMark("ELFLDR-MENU-INPAGE",
              "no-navigation-parked-racers-and-fds-remain-owned-port=9021");
-         showPayloadMenu();
+         if (!payloadMenuEl.classList.contains("on")) showPayloadMenu();
 +        if (cfg.autoload) {
 +            stage("autoloading " + cfg.autoload + " in 4 s", "ok");
 +            setTimeout(function () {
@@ -75,10 +77,10 @@ index eb01cd3..ce60b95 100644
  }
  
 diff --git a/slopkit/poops.js b/slopkit/poops.js
-index 5dda36f..7ad9d01 100644
+index ae366f1..e8cf018 100644
 --- a/slopkit/poops.js
 +++ b/slopkit/poops.js
-@@ -7834,9 +7834,9 @@ export function makePoopsEngine(X) {
+@@ -7819,9 +7819,9 @@ export function makePoopsEngine(X) {
      flushMark("STAGE5-FETCH-BIN-OK", "bytes=" + binBytes.length);
  
      try {

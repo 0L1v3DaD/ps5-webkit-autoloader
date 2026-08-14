@@ -164,14 +164,16 @@ def compress_entry(data):
 # or the console serves a fallback document instead of the exploit page. The
 # app now lives under /app/<version>/, so the URL is prefixed with that. Keep
 # in sync with SLOPKIT_URL in frontend/autoloader/app.js (which resolves to the
-# same absolute path from the versioned app dir).
+# same absolute path from the versioned app dir). The trailing v= matches
+# slopkit's ROUTE_VERSION cache-bust (see the patch regeneration notes in
+# ARCHITECTURE.md).
 def slopkit_iframe_url(app_dir):
     return (
         app_dir + "/slopkit/slopkit/poops.html"
         "?go=1&auto=1&production=1&trigger=netcontrol&attempts=8"
         "&only=ps0_preflight,ps1_prepare,ps3_stage0,ps4_validate"
         ",ps5_stage1,ps6_stage2,ps8_stage3,ps9_stage4,ps10_stage5"
-        "&log=debug&payload=1&autoload=payload.elf&v=41"
+        "&log=debug&payload=1&autoload=payload.elf&v=final"
     )
 
 
@@ -183,17 +185,17 @@ def umtx2_iframe_url(app_dir):
     return app_dir + "/umtx2/index.html?autoload=payload.elf&v=1"
 
 # slopkit references its own scripts with cache-busting query strings
-# (e.g. "./core.js?v=10", "main.js?v=19", "../offsets/9.00.js?v=19").
+# (e.g. "./core.js?v=final", "main.js?v=final", "../offsets/9.00.js?v=final").
 # AppCache matches URLs exactly, so the manifest must list those query
 # variants too or the console falls back and the module imports fail.
-CACHEBUST_RE = re.compile(r'([A-Za-z0-9_./-]+\.(?:js|css|html|png|jpg|gif))\?v=\d+')
+CACHEBUST_RE = re.compile(r'([A-Za-z0-9_./-]+\.(?:js|css|html|png|jpg|gif))\?v=[A-Za-z0-9]+')
 
 
 def collect_cachebust_urls(files):
     """Scan staged HTML/JS for query-string script imports (slopkit's ?v=
     cache-busters) and return their absolute URLs, resolved relative to the
-    referencing file. Offsets are loaded dynamically as ../offsets/<fw>.js?v=19
-    in main.js, so every offsets file gets the ?v=19 variant as well."""
+    referencing file. Offsets are loaded dynamically as ../offsets/<fw>.js?v=final
+    in main.js, so every offsets file gets the ?v=final variant as well."""
     urls = set()
     for path, full in files:
         try:
@@ -209,7 +211,7 @@ def collect_cachebust_urls(files):
                 urls.add(resolved + query)
     for path, _ in files:
         if "/slopkit/offsets/" in path and path.endswith(".js"):
-            urls.add(path + "?v=19")
+            urls.add(path + "?v=final")
     return sorted(urls)
 
 
