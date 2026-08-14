@@ -65,11 +65,6 @@ else
     exit 1
 fi
 
-# Strip all unnecessary images to drastically reduce AppCache file count
-find "$DEST" -name "*.png" -delete
-find "$DEST" -name "*.jpg" -delete
-find "$DEST" -name "*.gif" -delete
-
 # 4. Sanity check: the patched page must carry our integration markers.
 #    Catches a silently truncated/empty patch. These markers only exist when
 #    the patch applied (they are not in pristine slopkit).
