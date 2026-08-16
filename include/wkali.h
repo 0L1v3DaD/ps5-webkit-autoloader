@@ -25,6 +25,8 @@
 #define ROUTE_CACHE_MANIFEST "/cache.appcache"
 #define ROUTE_INSTALL "/install"
 #define ROUTE_VERSION "/version"
+#define ROUTE_CLEAR_WEBKIT_DATA "/clear-webkit-data"
+#define ROUTE_EXIT "/exit"
 
 /* Logging (implementation in log.c) */
 void wkali_log(const char *fmt, ...);
