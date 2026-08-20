@@ -124,29 +124,12 @@ int main(void) {
     signal(SIGTERM, sig_handler);
     signal(SIGINT, sig_handler);
 
-    /* Bind explicitly to 127.0.0.1 */
-    struct sockaddr_in bind_addr;
-    memset(&bind_addr, 0, sizeof(bind_addr));
-    bind_addr.sin_family = AF_INET;
-    bind_addr.sin_port = htons(WKALI_PORT);
-    bind_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-
     /* Start the MHD daemon using a thread pool to handle concurrent AppCache requests. */
     daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_DEBUG,
                               WKALI_PORT, NULL, NULL, &http_on_request,
                               NULL,
-                              MHD_OPTION_SOCK_ADDR, (struct sockaddr *)&bind_addr,
                               MHD_OPTION_THREAD_POOL_SIZE, (unsigned int)8,
                               MHD_OPTION_END);
-
-    if (NULL == daemon) {
-        /* Fallback without explicit SOCK_ADDR if loopback bind fails */
-        daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_DEBUG,
-                                  WKALI_PORT, NULL, NULL, &http_on_request,
-                                  NULL,
-                                  MHD_OPTION_THREAD_POOL_SIZE, (unsigned int)8,
-                                  MHD_OPTION_END);
-    }
 
     if (NULL == daemon) {
         wkali_log("[WKALI] Failed to start HTTP daemon!\n");
