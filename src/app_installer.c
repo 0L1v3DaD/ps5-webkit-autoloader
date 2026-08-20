@@ -92,7 +92,12 @@ static int install_app(const char *title_id, const char *dir) {
     return sceAppInstUtilAppInstallTitleDir(title_id, dir, 0);
   }
 
-  return sceAppInstUtilAppInstallAll(0);
+  /* Do NOT fall back to sceAppInstUtilAppInstallAll(0)! That function scans
+   * the entire /user/app/ tree and attempts to install every folder as a game,
+   * which corrupts the PS5 Package Downloader queue in app.db and causes
+   * "Something went wrong" errors in Debug Settings. */
+  wkali_log("[WKALI] sceAppInstUtilAppInstallTitleDir resolve failed, aborting install to protect package queue\n");
+  return -1;
 }
 
 static int needs_update(const char *path, const uint8_t *expected_data,
@@ -166,6 +171,9 @@ int wkali_install_app_if_needed(void) {
     wkali_log("[WKALI] sceAppInstUtilInitialize: error 0x%08X\n", err);
     return -1;
   }
+
+  /* Unregister any previous/stale app database entry before updating files */
+  sceAppInstUtilAppUnInstall(title_id);
 
   char sce_sys_dir[256];
   snprintf(sce_sys_dir, sizeof(sce_sys_dir), "/user/app/%s/sce_sys", title_id);
