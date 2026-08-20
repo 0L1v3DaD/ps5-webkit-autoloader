@@ -50,7 +50,7 @@ cp "$SOURCE/document/en/ps5/payloads/elfldr-ps5.elf" "$DEST/payloads/"
 
 # 2. Turn the copy into a throwaway git repo so `git apply` can handle the
 #    patch. Two commits: pristine umtx2, then our autoloader patch.
-SRC_HASH=$(git -C "$SOURCE" rev-parse --short HEAD)
+SRC_HASH=$(git -C "$SOURCE" rev-parse --short HEAD 2>/dev/null || echo "pristine")
 git -C "$DEST" init -q
 git -C "$DEST" config user.name "wkal"
 git -C "$DEST" config user.email "wkal@localhost"

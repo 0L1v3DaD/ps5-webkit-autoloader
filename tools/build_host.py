@@ -14,6 +14,7 @@ import argparse
 import base64
 import io
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -48,16 +49,30 @@ def repo_root():
 # umtx2 keeps its OWN bundled elfldr (umtx2/payloads/elfldr-ps5.elf, like stock
 # umtx2) and its other bundled payloads are pruned by tools/apply_umtx2_patch.sh.
 # The copied slopkit/umtx2 are throwaway git repos (tools/apply_*_patch.sh), so
-# .git must never be embedded. The payload digest sidecars (payloads/*.sha256)
-# are build-time bookkeeping and must never be served.
+# .git, patches, placeholders and metadata must never be embedded.
 def include_in_zip(rel):
-    if "/.git/" in rel or rel.endswith("/.git"):
+    if (
+        rel == ".git"
+        or rel.startswith(".git/")
+        or "/.git/" in rel
+        or rel.endswith("/.git")
+        or rel in (".gitignore", ".gitmodules", ".gitkeep")
+        or rel.endswith("/.gitkeep")
+    ):
+        return False
+    if rel == ".DS_Store" or rel.endswith("/.DS_Store") or rel == "Thumbs.db" or rel.endswith("/Thumbs.db"):
+        return False
+    if rel == "placeholder.txt" or rel.endswith("/placeholder.txt"):
+        return False
+    if rel.endswith(".patch") or rel.endswith(".diff") or rel.endswith(".orig") or rel.endswith(".bak"):
+        return False
+    if rel.endswith(".sha256") or rel.endswith(".sha256sum") or rel.endswith(".tmp"):
+        return False
+    if "/__pycache__/" in rel or rel.endswith(".pyc") or rel.endswith(".pyo"):
         return False
     if rel.startswith("slopkit/payloads/"):
         return rel.endswith("kexp_2026_05_25.bin")
     if rel == "slopkit/readme.png":
-        return False
-    if rel.endswith(".sha256"):
         return False
     return True
 
@@ -88,11 +103,13 @@ def build_zip(frontend_dir, overrides_dir, version, build_time, payload_path=Non
                     continue
                 full = os.path.join(root, name)
                 rel = os.path.relpath(full, overrides_dir).replace(os.sep, "/")
+                if not include_in_zip(rel):
+                    continue
                 file_map[rel] = full
 
     # 3. Host payload override: the PC host is the one-time setup flow, so it
     #    serves the installer ELF instead of the bundled unified-autoloader.
-    #    The virtual path stays the same ("payload.elf") so the
+    #    The virtual path stays the same ("payloads/payload.elf") so the
     #    autoloader's ?autoload= request is unchanged — only the bytes differ.
     if payload_path:
         payload_path = os.path.abspath(payload_path)
@@ -162,24 +179,29 @@ def embed_payload(source, payload_b64):
 def generate_server_cert():
     """Generate a self-signed certificate for the spoofed target domain and
     return (cert_pem, key_pem)."""
+    if not shutil.which("openssl"):
+        sys.exit("Error: 'openssl' command not found in PATH. Please install OpenSSL.")
     tmpdir = tempfile.mkdtemp(prefix="ps5-wkal-")
     cert_path = os.path.join(tmpdir, "cert.pem")
     key_path = os.path.join(tmpdir, "key.pem")
-    subprocess.run(
-        [
-            "openssl", "req", "-x509", "-newkey", "rsa:2048",
-            "-nodes", "-days", "3650", "-sha256",
-            "-keyout", key_path, "-out", cert_path,
-            "-subj", "/CN=" + CERT_TARGET,
-        ],
-        check=True,
-        capture_output=True,
-    )
-    with open(cert_path) as f:
-        cert = f.read()
-    with open(key_path) as f:
-        key = f.read()
-    return cert, key
+    try:
+        subprocess.run(
+            [
+                "openssl", "req", "-x509", "-newkey", "rsa:2048",
+                "-nodes", "-days", "3650", "-sha256",
+                "-keyout", key_path, "-out", cert_path,
+                "-subj", "/CN=" + CERT_TARGET,
+            ],
+            check=True,
+            capture_output=True,
+        )
+        with open(cert_path, "r", encoding="utf-8") as f:
+            cert = f.read()
+        with open(key_path, "r", encoding="utf-8") as f:
+            key = f.read()
+        return cert, key
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def embed_server_cert(source, cert_pem, key_pem):
@@ -231,14 +253,14 @@ def main(argv=None):
     build_time = version_info["build_time"]
     zip_data, file_map = build_zip(frontend_dir, overrides_dir, version, build_time,
                                    payload_path=args.payload)
-    
+
     if not file_map:
         sys.exit(f"Error: no files to embed from {frontend_dir} and {overrides_dir}")
 
     raw_size = sum(os.path.getsize(path) for path in file_map.values())
     payload_b64 = base64.b64encode(zip_data).decode("ascii")
 
-    with open(input_path, "r") as f:
+    with open(input_path, "r", encoding="utf-8") as f:
         source = f.read()
 
     built = embed_payload(source, payload_b64)
@@ -249,7 +271,7 @@ def main(argv=None):
     # Sanity-check the injected payload decodes and the file compiles
     compile(built, output_path, "exec")
 
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(built)
 
     print(f"Embedded {len(file_map)} files (merged from {frontend_dir} and {overrides_dir})")

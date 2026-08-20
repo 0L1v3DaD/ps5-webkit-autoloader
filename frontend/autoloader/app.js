@@ -240,17 +240,19 @@
     }
 
     var lines = scr.textContent.split('\n');
-    /* If the screen shrank (slopkit caps its log at SCREEN_LINES and drops
-       the oldest lines, or a fresh document replaced it), re-anchor the
-       counter WITHOUT re-logging — the remaining lines were already streamed,
-       and re-streaming them would double the log. A fresh document starts
-       empty, so its new lines stream normally from here on. */
-    if (lines.length < mirroredLines) {
-      mirroredLines = lines.length;
+    var startIndex = 0;
+    if (mirrorSlopkit.lastSeenLine) {
+      for (var i = lines.length - 1; i >= 0; i--) {
+        if (lines[i] === mirrorSlopkit.lastSeenLine) {
+          startIndex = i + 1;
+          break;
+        }
+      }
     }
-    for (; mirroredLines < lines.length; mirroredLines++) {
-      var line = lines[mirroredLines].trim();
+    for (var j = startIndex; j < lines.length; j++) {
+      var line = lines[j].trim();
       if (!line) continue;
+      mirrorSlopkit.lastSeenLine = lines[j];
       /* Curated release log: surface the per-row progress ("> "), the
          milestone marks (STAGE / POOPS / LATCH / OFFSETS / ...), and
          anything that looks like a failure — never the full raw stream
@@ -315,50 +317,46 @@
      classes onto ours. umtx2 updates its last console line in place for
      progress logs (FLAG_TEMP, e.g. "Race attempt N-M"), so we update our
      matching last line in place too. */
-  var umtx2MirroredLines = 0;
+  var umtx2LastDiv = null;
   var umtx2LastEntry = null;
   var umtx2LastText = '';
   function mirrorUmtx2() {
     var doc;
-    try {
-      doc = exploitEl.contentDocument;
-    } catch (e) {
-      return;
-    }
+    try { doc = exploitEl.contentDocument; } catch (e) { return; }
     if (!doc || !chainStarted) return;
+    
     var lines = doc.querySelectorAll('#console > div');
-    if (lines.length < umtx2MirroredLines) {
-      /* Iframe reloaded (#console recreated) — restart from a fresh document. */
-      umtx2MirroredLines = lines.length;
-      umtx2LastEntry = null;
-      umtx2LastText = '';
-    }
-    for (; umtx2MirroredLines < lines.length; umtx2MirroredLines++) {
-      var el = lines[umtx2MirroredLines];
-      var text = (el.textContent || '').trim();
-      if (!text) continue;
-      var cls = el.className || '';
-      var entry;
-      if (/LOG-ERROR/.test(cls)) {
-        entry = uiLog('[umtx2] ' + text, 'error');
-      } else if (/LOG-WARN/.test(cls)) {
-        entry = uiLog('[umtx2] ' + text, 'warning');
-      } else if (/LOG-SUCCESS/.test(cls)) {
-        entry = uiLog('[umtx2] ' + text, 'success');
-      } else {
-        entry = uiLog('[umtx2] ' + text, 'info');
+    for (var i = 0; i < lines.length; i++) {
+      var el = lines[i];
+      if (!el.wkal_seen) {
+        el.wkal_seen = true;
+        var text = (el.textContent || '').trim();
+        if (!text) continue;
+        var cls = el.className || '';
+        var entry;
+        if (/LOG-ERROR/.test(cls)) {
+          entry = uiLog('[umtx2] ' + text, 'error');
+        } else if (/LOG-WARN/.test(cls)) {
+          entry = uiLog('[umtx2] ' + text, 'warning');
+        } else if (/LOG-SUCCESS/.test(cls)) {
+          entry = uiLog('[umtx2] ' + text, 'success');
+        } else {
+          entry = uiLog('[umtx2] ' + text, 'info');
+        }
+        umtx2LastDiv = el;
+        umtx2LastEntry = entry;
+        umtx2LastText = text;
       }
-      umtx2LastEntry = entry;
-      umtx2LastText = text;
     }
     /* Live-update the last mirrored line when umtx2 rewrites it in place. */
-    if (lines.length > 0 && umtx2LastEntry
-      && umtx2LastEntry === logContainer.lastChild) {
-      var last = lines[lines.length - 1];
-      var lastText = (last.textContent || '').trim();
-      if (lastText && lastText !== umtx2LastText) {
-        umtx2LastEntry.textContent = '[umtx2] ' + lastText;
-        umtx2LastText = lastText;
+    if (lines.length > 0 && umtx2LastDiv) {
+      var lastEl = lines[lines.length - 1];
+      if (lastEl === umtx2LastDiv) {
+        var lastText = (lastEl.textContent || '').trim();
+        if (lastText && lastText !== umtx2LastText) {
+          if (umtx2LastEntry) umtx2LastEntry.textContent = '[umtx2] ' + lastText;
+          umtx2LastText = lastText;
+        }
       }
     }
   }

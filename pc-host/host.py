@@ -30,6 +30,7 @@ import mimetypes
 import os
 import posixpath
 import re
+import shutil
 import socket
 import socketserver
 import ssl
@@ -56,22 +57,67 @@ VERSION = "dev"
 # [[BUILD_TIME_PLACEHOLDER]]
 BUILD_TIME = "dev"
 
-# ANSI colors (enabled only when output is a real terminal)
+# DNS query types
+DNS_TYPE_A = 1
+DNS_TYPE_AAAA = 28
+DNS_TYPE_HTTPS = 65
+DNS_TYPE_ANY = 255
+
+# MIME type overrides to guarantee correct Content-Type across all platforms (Windows/Linux/macOS)
+MIME_OVERRIDES = {
+    ".html": "text/html; charset=utf-8",
+    ".htm": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript",
+    ".mjs": "application/javascript",
+    ".json": "application/json",
+    ".webmanifest": "application/manifest+json",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".ico": "image/x-icon",
+    ".appcache": "text/cache-manifest",
+    ".bin": "application/octet-stream",
+    ".elf": "application/octet-stream",
+    ".wasm": "application/wasm",
+    ".txt": "text/plain; charset=utf-8",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+}
+
+
+# ANSI colors (enabled only when output is a real terminal and NO_COLOR is not set)
 def _init_console():
     """Enable ANSI/VT processing on Windows consoles; returns True when
     color output is supported."""
+    if os.environ.get("NO_COLOR") or os.environ.get("TERM") == "dumb":
+        return False
     if not sys.stdout.isatty():
         return False
     if os.name == "nt":
-        import ctypes
+        try:
+            import ctypes
 
-        kernel32 = ctypes.windll.kernel32
-        ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
-        for handle_id in (-11, -12):  # stdout, stderr
-            handle = kernel32.GetStdHandle(handle_id)
-            mode = ctypes.c_ulong()
-            if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
-                kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+            kernel32 = ctypes.windll.kernel32
+            ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+            vt_ok = False
+            for handle_id in (-11, -12):  # stdout, stderr
+                handle = kernel32.GetStdHandle(handle_id)
+                mode = ctypes.c_ulong()
+                if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                    if kernel32.SetConsoleMode(
+                        handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING
+                    ):
+                        vt_ok = True
+            if not vt_ok and "ANSICON" not in os.environ and "WT_SESSION" not in os.environ:
+                return False
+        except Exception:
+            return False
     return True
 
 
@@ -182,8 +228,8 @@ class UpdateChecker:
             with urllib.request.urlopen(req, timeout=self.TIMEOUT) as resp:
                 if resp.status != 200:
                     return
-                tag = json.load(resp).get("tag_name", "")
-            self.latest = self._base_version(tag.lstrip("v"))
+                tag_name = json.load(resp).get("tag_name", "")
+            self.latest = self._base_version(tag_name.lstrip("v"))
         except Exception:
             pass
         finally:
@@ -200,6 +246,7 @@ class UpdateChecker:
             return None
         latest = ".".join(str(x) for x in self.latest)
         return tag(f"[+] A newer version (v{latest}) is available — {self.RELEASES_URL}")
+
 
 # The HTTPS server needs a self-signed cert for the spoofed target domain.
 # tools/build_host.py generates a fresh pair at build time and injects it into
@@ -268,25 +315,43 @@ def get_server_cert():
     key_path = os.path.join(tmpdir, "key.pem")
     try:
         generate_server_cert(cert_path, key_path)
+        with open(cert_path, "r", encoding="utf-8") as f:
+            cert = f.read()
+        with open(key_path, "r", encoding="utf-8") as f:
+            key = f.read()
+        return cert, key
     except (OSError, subprocess.CalledProcessError):
         return None, None
-    with open(cert_path) as f:
-        cert = f.read()
-    with open(key_path) as f:
-        key = f.read()
-    return cert, key
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def detect_local_ip():
-    """Best-effort local IP detection (no traffic is actually sent)."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    """Best-effort local IP detection across multiple interfaces and offline LANs."""
+    # 1. Try UDP connection to standard public addresses (no traffic is sent)
+    for probe in (("8.8.8.8", 80), ("1.1.1.1", 80)):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(probe)
+            ip = s.getsockname()[0]
+            if ip and not ip.startswith("127."):
+                return ip
+        except OSError:
+            pass
+        finally:
+            s.close()
+
+    # 2. Try hostname lookup for local LAN IP (useful on offline networks / direct cables)
     try:
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
+        hostname = socket.gethostname()
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if ip and not ip.startswith("127.") and ":" not in ip:
+                return ip
     except OSError:
-        return "127.0.0.1"
-    finally:
-        s.close()
+        pass
+
+    # 3. Fallback to loopback
+    return "127.0.0.1"
 
 
 def validate_ip(value):
@@ -295,26 +360,68 @@ def validate_ip(value):
 
 
 def _bind_hint(service, port, exc):
-    """Return a user-facing hint for a bind failure, or '' when unknown."""
-    if isinstance(exc, PermissionError):
-        return (
-            f"    {service} port {port} needs elevated privileges: on Linux, ports below "
-            "1024 require root (e.g. 'sudo python3 host.py'); on Windows the port may be "
-            "reserved by a system service."
-        )
-    if getattr(exc, "errno", None) == errno.EADDRINUSE:
-        return (
-            f"    Port {port} is already in use — stop the process holding it (on Windows, "
-            f"the DNS Client service can hold port 53), or pick another port "
-            f"(e.g. --dns-port 1053 / --https-port 8443)."
-        )
+    """Return a user-facing actionable hint for a bind failure, or '' when unknown."""
+    err = getattr(exc, "errno", None)
+    is_perm = (
+        isinstance(exc, PermissionError)
+        or err in (errno.EACCES, errno.EPERM)
+        or getattr(exc, "winerror", None) == 10013
+    )
+    is_inuse = err == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048
+
+    if is_perm:
+        if os.name == "nt":
+            return (
+                f"    {service} port {port} requires elevated permissions on Windows:\n"
+                f"    Run Command Prompt or PowerShell as Administrator."
+            )
+        else:
+            return (
+                f"    {service} port {port} requires root privileges (ports < 1024 on Unix):\n"
+                f"    Run with: sudo python3 host.py"
+            )
+    if is_inuse:
+        if port == 53:
+            if os.name == "nt":
+                return (
+                    f"    Port 53 is already in use (on Windows, often Internet Connection Sharing,\n"
+                    f"    SharedAccess, or DNS Client). Stop conflicting services or check:\n"
+                    f"    netstat -ano | findstr :53"
+                )
+            elif sys.platform == "darwin":
+                return (
+                    f"    Port 53 is already in use (on macOS, often mDNSResponder or named).\n"
+                    f"    Check the holding process with: sudo lsof -i :53"
+                )
+            else:
+                return (
+                    f"    Port 53 is already in use (on Linux, often systemd-resolved or dnsmasq).\n"
+                    f"    To temporarily stop systemd-resolved: sudo systemctl stop systemd-resolved\n"
+                    f"    Or check holding process with: sudo lsof -i :53 (or sudo fuser 53/udp)"
+                )
+        elif port == 443:
+            if os.name == "nt":
+                return (
+                    f"    Port 443 is already in use (IIS, VMware, or local web server).\n"
+                    f"    Check the holding process with: netstat -ano | findstr :443"
+                )
+            else:
+                return (
+                    f"    Port 443 is already in use (nginx, apache2, Caddy, or docker).\n"
+                    f"    Check the holding process with: sudo lsof -i :443"
+                )
+        else:
+            return (
+                f"    Port {port} is already in use — stop the process holding it, or pick\n"
+                f"    another port (e.g. --dns-port 1053 / --https-port 8443)."
+            )
     return ""
 
 
 def parse_query(data):
     """Parse the first question of a DNS query.
 
-    Returns ``(qid, question_bytes, name)`` where ``question_bytes`` is the
+    Returns ``(qid, question_bytes, name, qtype, qclass)`` where ``question_bytes`` is the
     raw question section to echo back in the response, or ``None`` on failure.
     """
     if len(data) < 12:
@@ -342,21 +449,32 @@ def parse_query(data):
 
     if offset + 4 > len(data):  # QTYPE + QCLASS
         return None
+    qtype, qclass = struct.unpack(">HH", data[offset : offset + 4])
     end = offset + 4
     name = ".".join(labels).lower()
-    return qid, data[12:end], name
+    return qid, data[12:end], name, qtype, qclass
 
 
-def build_response(qid, question_bytes, ip=None):
-    """Build a DNS response. With ``ip`` -> answer with an A record,
-    without -> NXDOMAIN."""
-    if ip is None:
-        flags = 0x8183  # QR + RD + RA + NXDOMAIN
-        answer = b""
+def build_response(qid, question_bytes, ip=None, qtype=DNS_TYPE_A):
+    """Build a DNS response.
+    - If ``ip`` is given and query is for A (1) or ANY (255): answer with an A record.
+    - If ``ip`` is given for target domain on non-A queries (e.g. AAAA=28, HTTPS=65):
+      return NOERROR with 0 answers (NODATA) so dual-stack clients immediately fall back to IPv4.
+    - Without ``ip``: NXDOMAIN (blocks all other domains).
+    """
+    if ip is not None:
+        flags = 0x8180  # QR + RD + RA, RCODE=0 (NOERROR)
+        if qtype in (DNS_TYPE_A, DNS_TYPE_ANY):
+            answer = b"\xc0\x0c" + struct.pack(">HHIH", 1, 1, DEFAULT_TTL, 4) + socket.inet_aton(ip)
+            ancount = 1
+        else:
+            answer = b""
+            ancount = 0
     else:
-        flags = 0x8180  # QR + RD + RA
-        answer = b"\xc0\x0c" + struct.pack(">HHIH", 1, 1, DEFAULT_TTL, 4) + socket.inet_aton(ip)
-    header = struct.pack(">HHHHHH", qid, flags, 1, 1 if ip else 0, 0, 0)
+        flags = 0x8183  # QR + RD + RA + RCODE=3 (NXDOMAIN)
+        answer = b""
+        ancount = 0
+    header = struct.pack(">HHHHHH", qid, flags, 1, ancount, 0, 0)
     return header + question_bytes + answer
 
 
@@ -399,19 +517,27 @@ class GuideStatus:
 
 class DNSHandler(socketserver.BaseRequestHandler):
     def handle(self):
-        data, sock = self.request
-        parsed = parse_query(data)
-        if parsed is None:
-            return
-        qid, question_bytes, name = parsed
-        server = self.server
-        server.guide.on_connection()
-        if name == server.target.lower():
-            server.log(_style(f"[DNS]  {name} -> {server.ip}", 36))
-            sock.sendto(build_response(qid, question_bytes, server.ip), self.client_address)
-        else:
-            server.log(_style(f"[DNS]  {name} -> BLOCKED (NXDOMAIN)", 33))
-            sock.sendto(build_response(qid, question_bytes), self.client_address)
+        try:
+            data, sock = self.request
+            parsed = parse_query(data)
+            if parsed is None:
+                return
+            qid, question_bytes, name, qtype, _qclass = parsed
+            server = self.server
+            server.guide.on_connection()
+            if name == server.target.lower():
+                type_name = "A" if qtype == 1 else ("AAAA" if qtype == 28 else str(qtype))
+                server.log(_style(f"[DNS]  {name} ({type_name}) -> {server.ip}", 36))
+                sock.sendto(
+                    build_response(qid, question_bytes, server.ip, qtype),
+                    self.client_address,
+                )
+            else:
+                server.log(_style(f"[DNS]  {name} -> BLOCKED (NXDOMAIN)", 33))
+                sock.sendto(build_response(qid, question_bytes), self.client_address)
+        except OSError:
+            # Client disconnected or network interface transient drop; ignore
+            pass
 
 
 class DNSServer(socketserver.ThreadingUDPServer):
@@ -429,9 +555,11 @@ class DualDirHandler(SimpleHTTPRequestHandler):
     """Serves files from overrides/ first, the embedded zip archive second,
     and base_dir last."""
 
+    timeout = 15
+
     def __init__(self, *args, base_dir, overrides_dir, allowed_host, embedded_zip=None, **kwargs):
         self.base_dir = os.path.abspath(base_dir) if base_dir else None
-        self.overrides_dir = os.path.abspath(overrides_dir)
+        self.overrides_dir = os.path.abspath(overrides_dir) if overrides_dir else None
         self.allowed_host = allowed_host.lower() if allowed_host else None
         self.embedded_zip = embedded_zip
         super().__init__(*args, directory=self.base_dir, **kwargs)
@@ -451,16 +579,16 @@ class DualDirHandler(SimpleHTTPRequestHandler):
         """Normalize the request path into a docroot-relative path ('' for
         root), skipping unsafe words — mirrors SimpleHTTPRequestHandler."""
         path = self.path.split("?", 1)[0].split("#", 1)[0]
-        
+
         # Intercept PS5 User's Guide URLs (e.g. /document/en/ps5/index.html)
         if path.startswith("/document/") and "/ps5/" in path:
             path = "/" + path.split("/ps5/", 1)[1]
-            
+
         # The autoloader HTML hardcodes /app/ for the ELF cache structure.
         # Map /app/ back to the root so the standalone files resolve properly.
         if path.startswith("/app/"):
             path = path[4:]
-            
+
         try:
             path = urllib.parse.unquote(path, errors="surrogatepass")
         except UnicodeDecodeError:
@@ -491,23 +619,28 @@ class DualDirHandler(SimpleHTTPRequestHandler):
             return None
 
         # 1. Overrides directory (local development)
-        for candidate in candidates:
-            override_path = os.path.join(self.overrides_dir, candidate)
-            if os.path.isfile(override_path):
-                with open(override_path, "rb") as f:
-                    return f.read(), self._content_type(candidate), os.path.getmtime(override_path), "overrides", candidate
+        if self.overrides_dir and os.path.isdir(self.overrides_dir):
+            for candidate in candidates:
+                override_path = os.path.normpath(os.path.join(self.overrides_dir, *candidate.split("/")))
+                if os.path.isfile(override_path):
+                    with open(override_path, "rb") as f:
+                        return f.read(), self._content_type(candidate), os.path.getmtime(override_path), "overrides", candidate
 
         # 2. Base directory (local development)
-        for candidate in candidates:
-            base_path = os.path.join(self.base_dir, candidate)
-            if os.path.isfile(base_path):
-                with open(base_path, "rb") as f:
-                    return f.read(), self._content_type(candidate), os.path.getmtime(base_path), "base", candidate
+        if self.base_dir and os.path.isdir(self.base_dir):
+            for candidate in candidates:
+                base_path = os.path.normpath(os.path.join(self.base_dir, *candidate.split("/")))
+                if os.path.isfile(base_path):
+                    with open(base_path, "rb") as f:
+                        return f.read(), self._content_type(candidate), os.path.getmtime(base_path), "base", candidate
 
         return None
 
     @staticmethod
     def _content_type(path):
+        ext = posixpath.splitext(path)[1].lower()
+        if ext in MIME_OVERRIDES:
+            return MIME_OVERRIDES[ext]
         return mimetypes.guess_type(path)[0] or "application/octet-stream"
 
     def host_allowed(self):
@@ -542,16 +675,51 @@ class DualDirHandler(SimpleHTTPRequestHandler):
         return io.BytesIO(data)
 
 
+class RobustThreadingHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer with daemon threads and clean error suppression for
+    transient disconnects and TLS handshake probes."""
+
+    daemon_threads = True
+
+    def __init__(self, *args, quiet=False, logger=print, guide=None, **kwargs):
+        self.quiet = quiet
+        self.log = logger
+        self.guide = guide or GuideStatus()
+        super().__init__(*args, **kwargs)
+
+    def handle_error(self, request, client_address):
+        """Suppress noisy tracebacks for expected disconnects and TLS probes."""
+        exc_type, exc_val, _ = sys.exc_info()
+        if exc_type is not None and issubclass(
+            exc_type,
+            (
+                ssl.SSLError,
+                ConnectionResetError,
+                BrokenPipeError,
+                TimeoutError,
+                socket.timeout,
+            ),
+        ):
+            if not self.quiet:
+                print(_style(f"[HTTP] Connection closed from {client_address[0]}: {exc_val}", 33))
+            return
+        if exc_type is OSError:
+            err = getattr(exc_val, "errno", None)
+            if err in (errno.ECONNRESET, errno.EPIPE, errno.ETIMEDOUT, errno.ECONNABORTED):
+                if not self.quiet:
+                    print(_style(f"[HTTP] Connection reset from {client_address[0]}", 33))
+                return
+        super().handle_error(request, client_address)
+
+
 def build_http_server(host, port, base, overrides, allowed_host, embedded_zip=None, logger=print, quiet=False, guide=None):
     handler = lambda *args, **kwargs: DualDirHandler(
         *args, base_dir=base, overrides_dir=overrides, allowed_host=allowed_host,
         embedded_zip=embedded_zip, **kwargs
     )
-    httpd = ThreadingHTTPServer((host, port), handler)
-    httpd.daemon_threads = True
-    httpd.log = logger
-    httpd.quiet = quiet
-    httpd.guide = guide or GuideStatus()
+    httpd = RobustThreadingHTTPServer(
+        (host, port), handler, quiet=quiet, logger=logger, guide=guide
+    )
     return httpd
 
 
@@ -699,19 +867,20 @@ def main(argv=None):
             key_file.write(key_pem.encode("ascii"))
             key_file.close()
 
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            context.load_cert_chain(certfile=cert_file.name, keyfile=key_file.name)
-            httpsd.socket = context.wrap_socket(httpsd.socket, server_side=True)
-
-            # Best-effort cleanup: on Windows, antivirus/indexing scanners may
-            # briefly hold the files open and make os.unlink fail. The cert is
-            # already loaded into the SSL context, so leaking the temp file is
-            # harmless — only the warning matters.
-            for fname in (cert_file.name, key_file.name):
-                try:
-                    os.unlink(fname)
-                except OSError as exc:
-                    print(tag(f"[-] Could not remove temp {fname}: {exc}"))
+            try:
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                context.load_cert_chain(certfile=cert_file.name, keyfile=key_file.name)
+                httpsd.socket = context.wrap_socket(httpsd.socket, server_side=True)
+            finally:
+                for fname in (cert_file.name, key_file.name):
+                    try:
+                        os.unlink(fname)
+                    except OSError:
+                        time.sleep(0.05)
+                        try:
+                            os.unlink(fname)
+                        except OSError:
+                            pass
         except OSError as exc:
             print(tag(f"[-] Could not bind HTTPS port {args.https_port} (required): {exc}"))
             hint = _bind_hint("HTTPS", args.https_port, exc)
@@ -746,18 +915,27 @@ def main(argv=None):
     print(tag("[+] Waiting for PS5 connection...\n"))
     try:
         while True:
-            threading.Event().wait(3600)
+            time.sleep(0.5)
     except KeyboardInterrupt:
         print(tag("\n[-] Shutting down."))
         if dns:
-            dns.shutdown()
-            dns.server_close()
+            try:
+                dns.shutdown()
+                dns.server_close()
+            except Exception:
+                pass
         if httpd:
-            httpd.shutdown()
-            httpd.server_close()
+            try:
+                httpd.shutdown()
+                httpd.server_close()
+            except Exception:
+                pass
         if httpsd:
-            httpsd.shutdown()
-            httpsd.server_close()
+            try:
+                httpsd.shutdown()
+                httpsd.server_close()
+            except Exception:
+                pass
     return 0
 
 

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdatomic.h>
+#include <pthread.h>
 #include <microhttpd.h>
 
 #include "wkali.h"
@@ -37,8 +38,11 @@ atomic_int install_completed = 0;
  * visible to the main loop. */
 atomic_int webkit_data_cleared = 0;
 
+static pthread_mutex_t install_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 static void add_cors_headers(struct MHD_Response *resp) {
     MHD_add_response_header(resp, "Access-Control-Allow-Origin", CORS_ORIGIN);
+    MHD_add_response_header(resp, "Access-Control-Expose-Headers", "X-Log-Pos, X-User-Id");
 }
 
 static const FileEntry *registry_lookup(const char *url) {
@@ -91,7 +95,10 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
          * homescreen app is only installed/updated now — never on startup —
          * so a shortcut is never created for a partial cache. On failure the
          * server stays up and the page tells the user to re-run the installer. */
+        pthread_mutex_lock(&install_mutex);
         int err = wkali_install_app_if_needed();
+        pthread_mutex_unlock(&install_mutex);
+
         if (err == 0) {
             wkali_log("[WKALI] App installed. Stopping server...\n");
             resp = MHD_create_response_from_buffer(strlen("OK"), (void *)"OK",
@@ -137,10 +144,16 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
             size_t copied = wkali_wait_logs(&pos, logs, 16384);
             /* Append the new pos as an HTTP header so the client knows */
             resp = MHD_create_response_from_buffer(copied, (void *)logs, MHD_RESPMEM_MUST_FREE);
-            char pos_hdr[64];
-            snprintf(pos_hdr, sizeof(pos_hdr), "%zu", pos);
-            MHD_add_response_header(resp, "X-Log-Pos", pos_hdr);
-            MHD_add_response_header(resp, "Content-Type", "text/plain");
+            if (resp) {
+                char pos_hdr[64];
+                snprintf(pos_hdr, sizeof(pos_hdr), "%zu", pos);
+                MHD_add_response_header(resp, "X-Log-Pos", pos_hdr);
+                MHD_add_response_header(resp, "Content-Type", "text/plain");
+            } else {
+                free(logs);
+                const char *oom = "500 Internal Server Error\n";
+                resp = MHD_create_response_from_buffer(strlen(oom), (void *)oom, MHD_RESPMEM_PERSISTENT);
+            }
         } else {
             const char *oom = "500 Internal Server Error\n";
             resp = MHD_create_response_from_buffer(strlen(oom), (void *)oom, MHD_RESPMEM_PERSISTENT);
@@ -271,6 +284,11 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
 
             resp = MHD_create_response_from_buffer(payload_size, payload,
                                                    mem_mode);
+            if (!resp) {
+                if (mem_mode == MHD_RESPMEM_MUST_FREE) free(payload);
+                return MHD_NO;
+            }
+
             MHD_add_response_header(resp, "Content-Type", entry->content_type);
             if (strcmp(url, ROUTE_CACHE_MANIFEST) == 0 ||
                 strstr(entry->content_type, "text/html") != NULL) {
@@ -282,8 +300,10 @@ enum MHD_Result http_on_request(void *cls, struct MHD_Connection *conn,
             resp = MHD_create_response_from_buffer(strlen(not_found),
                                                    (void *)not_found,
                                                    MHD_RESPMEM_PERSISTENT);
-            MHD_add_response_header(resp, "Content-Type", "text/plain");
-            http_status = MHD_HTTP_NOT_FOUND;
+            if (resp) {
+                MHD_add_response_header(resp, "Content-Type", "text/plain");
+                http_status = MHD_HTTP_NOT_FOUND;
+            }
         }
     }
 

@@ -42,7 +42,7 @@ rm -rf "$DEST/.git" "$DEST/.github" "$DEST/.gitignore" "$DEST/.gitmodules"
 # 2. Turn the copy into a throwaway git repo so `git apply` can handle binary
 #    diffs / patch chunks — plain git apply on a non-repo dir cannot.
 #    Two commits: pristine slopkit, then our autoloader patch.
-SRC_HASH=$(git -C "$SOURCE" rev-parse --short HEAD)
+SRC_HASH=$(git -C "$SOURCE" rev-parse --short HEAD 2>/dev/null || echo "pristine")
 git -C "$DEST" init -q
 git -C "$DEST" config user.name "wkal"
 git -C "$DEST" config user.email "wkal@localhost"

@@ -39,6 +39,7 @@ ELFLDR_DEST="$ROOT/frontend/autoloader/shared/elfldr-ps5.elf"
 # Bundled autoload payload
 PAYLOAD_SUBMODULE="$ROOT/third_party/ps5-unified-autoloader"
 PAYLOAD_REPO="itsPLK/ps5-unified-autoloader"
+DEFAULT_PAYLOAD_TAG="v0.1.4-955249d"
 PAYLOAD_DEST="$ROOT/frontend/autoloader/payloads/payload.elf"
 
 # Fetch the pinned release, verify the payload, and download it if needed.
@@ -46,9 +47,11 @@ PAYLOAD_DEST="$ROOT/frontend/autoloader/payloads/payload.elf"
 download_release() {
     local repo="$1" tag="$2" dest="$3"
     python3 - "$repo" "$tag" "$dest" <<'PY'
+import gzip
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -65,34 +68,29 @@ def sha256_of(path):
 
 # Offline fast path: asset + sidecar from a previous successful run.
 if os.path.isfile(dest) and os.path.isfile(sidecar):
-    with open(sidecar) as f:
+    with open(sidecar, "r", encoding="utf-8") as f:
         try:
             st_tag, st_hash = f.read().split()
         except ValueError:
             st_tag, st_hash = "", ""
-    if st_tag == tag and sha256_of(dest) == st_hash:
+    if st_tag == tag and sha256_of(dest).lower() == st_hash.lower():
         print(f"{os.path.basename(dest)} already present and verified ({tag}).")
         sys.exit(0)
-    print("Existing asset does not match the pinned release - re-checking...")
+    print(f"Existing asset {os.path.basename(dest)} does not match pinned release ({tag}) - re-checking...")
 
 def fetch(url, attempts=5):
-    """Fetch a URL, tolerating GitHub's flaky release CDN.
-
-    Two things break urllib against github.com release downloads:
-      - http.client adds `Accept-Encoding: identity` when unset, and the asset
-        CDN (release-assets.githubusercontent.com) deterministically drops those
-        connections. We send `gzip` and decompress by hand.
-      - The CDN also intermittently closes connections before responding, so we
-        retry with a short backoff.
-    """
-    import gzip
-
+    """Fetch a URL, tolerating GitHub's flaky release CDN and rate limits."""
     last = None
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     for i in range(attempts):
-        req = urllib.request.Request(url, headers={
+        headers = {
             "User-Agent": "ps5-webkit-autoloader-build",
             "Accept-Encoding": "gzip",
-        })
+        }
+        # Only send Authorization to GitHub API, never to asset CDN redirects
+        if token and url.startswith("https://api.github.com/"):
+            headers["Authorization"] = f"Bearer {token}"
+        req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 data = resp.read()
@@ -101,13 +99,17 @@ def fetch(url, attempts=5):
                 return data
         except Exception as exc:
             last = exc
-            time.sleep(1 + i)
+            wait = 2 ** i
+            if i < attempts - 1:
+                print(f"  [retry {i + 1}/{attempts}] {exc} - retrying in {wait}s...", file=sys.stderr)
+                time.sleep(wait)
     raise last
 
 try:
-    release = json.loads(fetch(f"https://api.github.com/repos/{repo}/releases/tags/{tag}"))
+    release_data = fetch(f"https://api.github.com/repos/{repo}/releases/tags/{tag}")
+    release = json.loads(release_data.decode("utf-8", "replace"))
 except Exception as exc:
-    print(f"Error: could not fetch release {tag} ({exc}).", file=sys.stderr)
+    print(f"Error: could not fetch release metadata for {repo}@{tag} ({exc}).", file=sys.stderr)
     sys.exit(1)
 
 asset = None
@@ -120,11 +122,28 @@ if asset is None:
     sys.exit(1)
 
 digest = asset.get("digest", "")
-digest = digest.split(":", 1)[-1] if ":" in digest else digest
+if ":" in digest:
+    digest = digest.split(":", 1)[-1].strip().lower()
+else:
+    digest = digest.strip().lower()
+
+# Fallback: check if release contains a companion .sha256 asset
+if not digest:
+    for a in release.get("assets", []):
+        aname = a.get("name", "")
+        if aname == asset.get("name", "") + ".sha256" or aname.endswith(".sha256"):
+            try:
+                sha_content = fetch(a["browser_download_url"]).decode("utf-8", "replace")
+                m = re.search(r"([a-fA-F0-9]{64})", sha_content)
+                if m:
+                    digest = m.group(1).lower()
+                    break
+            except Exception:
+                pass
 
 # Already downloaded and matching the pinned release? Just cache the digest.
-if os.path.isfile(dest) and digest and sha256_of(dest) == digest:
-    with open(sidecar, "w") as f:
+if os.path.isfile(dest) and digest and sha256_of(dest).lower() == digest:
+    with open(sidecar, "w", encoding="utf-8") as f:
         f.write(f"{tag} {digest}\n")
     print(f"{os.path.basename(dest)} already present and verified ({tag}).")
     sys.exit(0)
@@ -139,37 +158,34 @@ try:
 except Exception as exc:
     print(f"Error: download failed ({exc}).", file=sys.stderr)
     sys.exit(1)
+
+actual = hashlib.sha256(data).hexdigest().lower()
+if digest:
+    if actual != digest:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        print(f"Error: sha256 mismatch for {dest} (got {actual}, expected {digest}).", file=sys.stderr)
+        sys.exit(1)
+    print(f"sha256 verified: {actual}")
+else:
+    digest = actual
+    print(f"sha256 computed: {actual}")
+
 with open(tmp, "wb") as f:
     f.write(data)
 
-if digest:
-    actual = hashlib.sha256(data).hexdigest()
-    if actual != digest:
-        os.remove(tmp)
-        print(f"Error: sha256 mismatch (got {actual}, expected {digest}).", file=sys.stderr)
-        sys.exit(1)
-    print(f"sha256 verified: {actual}")
-
 os.replace(tmp, dest)
-with open(sidecar, "w") as f:
+with open(sidecar, "w", encoding="utf-8") as f:
     f.write(f"{tag} {digest}\n")
 print(f"{os.path.basename(dest)} ready ({tag}): {dest}")
 PY
 }
 
-if [ ! -e "$ELFLDR_SUBMODULE/.git" ]; then
-    echo "Error: ps5-elfldr submodule is not initialised."
-    echo "Run: git submodule update --init --recursive"
-    exit 1
+if [ -e "$PAYLOAD_SUBMODULE/.git" ]; then
+    PAYLOAD_TAG=$(git -C "$PAYLOAD_SUBMODULE" describe --tags --always 2>/dev/null || echo "$DEFAULT_PAYLOAD_TAG")
+else
+    PAYLOAD_TAG="$DEFAULT_PAYLOAD_TAG"
 fi
-
-if [ ! -e "$PAYLOAD_SUBMODULE/.git" ]; then
-    echo "Error: ps5-unified-autoloader submodule is not initialised."
-    echo "Run: git submodule update --init --recursive"
-    exit 1
-fi
-
-PAYLOAD_TAG=$(git -C "$PAYLOAD_SUBMODULE" describe --tags --always)
 
 download_release "$ELFLDR_REPO" "$ELFLDR_TAG" "$ELFLDR_DEST"
 download_release "$PAYLOAD_REPO" "$PAYLOAD_TAG" "$PAYLOAD_DEST"

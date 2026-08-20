@@ -16,6 +16,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/syscall.h>
 #include <sys/sysctl.h>
 #include <unistd.h>
@@ -28,8 +31,8 @@ static pid_t find_pid(const char *name) {
     int mib[4] = {1, 14, 8, 0};
     pid_t mypid = getpid();
     pid_t pid = -1;
-    size_t buf_size;
-    uint8_t *buf;
+    size_t buf_size = 0;
+    uint8_t *buf = NULL;
 
     if (sysctl(mib, 4, 0, &buf_size, 0, 0)) {
         wkali_log("[WKALI] sysctl failed\n");
@@ -49,17 +52,21 @@ static pid_t find_pid(const char *name) {
 
     /* KERN_PROC_ALL scan — raw offsets into FreeBSD 12's struct kinfo_proc
      * as exposed by the PS5 kernel: ki_pid at offset 72, ki_tdname at 447
-     * (matches the layout used by the ps5-payload-dev SDK's klib). These
-     * are ABI-specific; re-check if the kernel struct ever changes. */
-    for (uint8_t *ptr = buf; ptr < (buf + buf_size);) {
+     * (matches the layout used by the ps5-payload-dev SDK's klib). */
+    uint8_t *end = buf + buf_size;
+    for (uint8_t *ptr = buf; ptr + 448 <= end;) {
         int ki_structsize = *(int *)ptr;
+        if (ki_structsize <= 0 || ptr + ki_structsize > end) {
+            break;
+        }
+
         pid_t ki_pid = *(pid_t *)&ptr[72];
         char *ki_tdname = (char *)&ptr[447];
 
-        ptr += ki_structsize;
-        if (!strcmp(name, ki_tdname) && ki_pid != mypid) {
+        if (strncmp(name, ki_tdname, 32) == 0 && ki_pid != mypid) {
             pid = ki_pid;
         }
+        ptr += ki_structsize;
     }
 
     free(buf);
@@ -74,16 +81,21 @@ extern int sceUserServiceGetForegroundUser(int *);
 __attribute__((used)) volatile const char wkali_version_sig[] =
     "WKALI_VER:" WKAL_FULL_VERSION;
 
+static void sig_handler(int sig) {
+    (void)sig;
+    atomic_store(&http_keep_running, 0);
+}
+
 int main(void) {
-    struct MHD_Daemon *daemon;
+    struct MHD_Daemon *daemon = NULL;
     pid_t pid;
 
     syscall(SYS_thr_set_name, -1, WKALI_THREAD_NAME);
 
     /* Kill previous installer instances */
     while ((pid = find_pid(WKALI_THREAD_NAME)) > 0) {
-        if (kill(pid, SIGKILL)) {
-            wkali_log("[WKALI] kill failed\n");
+        if (kill(pid, SIGKILL) != 0 && errno != ESRCH) {
+            wkali_log("[WKALI] kill failed (errno: %d)\n", errno);
             return EXIT_FAILURE;
         }
         sleep(1);
@@ -107,19 +119,34 @@ int main(void) {
         wkali_log("[WKALI] sceUserServiceInitialize failed: 0x%08X\n", err);
     }
 
-    /* The homescreen app is installed/updated only AFTER the browser has
-     * finished caching (via the /install route), so a shortcut is never
-     * created for a partial cache. Nothing app-related happens at startup. */
     signal(SIGPIPE, SIG_IGN);
     signal(SIGHUP, SIG_IGN);
-    signal(SIGTERM, SIG_IGN);
+    signal(SIGTERM, sig_handler);
+    signal(SIGINT, sig_handler);
+
+    /* Bind explicitly to 127.0.0.1 */
+    struct sockaddr_in bind_addr;
+    memset(&bind_addr, 0, sizeof(bind_addr));
+    bind_addr.sin_family = AF_INET;
+    bind_addr.sin_port = htons(WKALI_PORT);
+    bind_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     /* Start the MHD daemon using a thread pool to handle concurrent AppCache requests. */
     daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_DEBUG,
                               WKALI_PORT, NULL, NULL, &http_on_request,
-                              NULL, 
+                              NULL,
+                              MHD_OPTION_SOCK_ADDR, (struct sockaddr *)&bind_addr,
                               MHD_OPTION_THREAD_POOL_SIZE, (unsigned int)8,
                               MHD_OPTION_END);
+
+    if (NULL == daemon) {
+        /* Fallback without explicit SOCK_ADDR if loopback bind fails */
+        daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_DEBUG,
+                                  WKALI_PORT, NULL, NULL, &http_on_request,
+                                  NULL,
+                                  MHD_OPTION_THREAD_POOL_SIZE, (unsigned int)8,
+                                  MHD_OPTION_END);
+    }
 
     if (NULL == daemon) {
         wkali_log("[WKALI] Failed to start HTTP daemon!\n");
@@ -150,8 +177,7 @@ int main(void) {
 
     while (atomic_load(&http_keep_running)) {
         /* Check if the frontend requested a WebKit data clear */
-        if (atomic_load(&webkit_data_cleared)) {
-            atomic_store(&webkit_data_cleared, 0);
+        if (atomic_exchange(&webkit_data_cleared, 0)) {
             webkit_clear_attempts++;
 
             if (webkit_clear_attempts <= 1) {
@@ -177,14 +203,13 @@ int main(void) {
     }
     wkali_log_wakeup();
 
-    /* Give the /logs thread half a second to wake up and flush the final logs 
-     * over the network before we aggressively kill the MHD daemon and all sockets. */
-    usleep(500000); 
+    /* Give the /logs and HTTP responses time to flush over the network
+     * before we stop the daemon. */
+    usleep(500000);
 
     if (daemon)
         MHD_stop_daemon(daemon);
 
     sleep(1);
-
     return 0;
 }

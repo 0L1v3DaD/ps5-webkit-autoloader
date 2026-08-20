@@ -95,16 +95,58 @@ def ql_render(svg_path, size):
         return f.read()
 
 
+def cairosvg_render(svg_path, size):
+    import importlib
+    cairosvg = importlib.import_module("cairosvg")
+    return cairosvg.svg2png(url=svg_path, output_width=size, output_height=size)
+
+
+def inkscape_render(svg_path, size):
+    return subprocess.run(
+        ["inkscape", "--export-type=png", "--export-filename=-", f"-w={size}", f"-h={size}", svg_path],
+        check=True,
+        capture_output=True,
+    ).stdout
+
+
+def magick_render(svg_path, size):
+    cmd = ["magick", "convert"] if shutil.which("magick") else ["convert"]
+    return subprocess.run(
+        [*cmd, "-background", "none", "-resize", f"{size}x{size}", svg_path, "png:-"],
+        check=True,
+        capture_output=True,
+    ).stdout
+
+
+def resvg_render(svg_path, size):
+    return subprocess.run(
+        ["resvg", "-w", str(size), "-h", str(size), svg_path, "-"],
+        check=True,
+        capture_output=True,
+    ).stdout
+
+
 def find_renderer():
     if shutil.which("rsvg-convert"):
         return rsvg_render
     if sys.platform == "darwin" and shutil.which("qlmanage"):
         return ql_render
+    if shutil.which("resvg"):
+        return resvg_render
+    if shutil.which("inkscape"):
+        return inkscape_render
+    if shutil.which("magick") or shutil.which("convert"):
+        return magick_render
+    try:
+        import importlib
+        importlib.import_module("cairosvg")
+        return cairosvg_render
+    except ImportError:
+        pass
     sys.exit(
-        "Error: no SVG renderer found.\n"
-        "  Run the build inside the ps5-webkit-autoloader-sdk docker image "
-        "(has rsvg-convert),\n"
-        "  or use macOS where qlmanage is available."
+        "Error: no SVG renderer found (checked rsvg-convert, qlmanage, resvg, inkscape, imagemagick, cairosvg).\n"
+        "  Run the build inside the ps5-webkit-autoloader-sdk docker image (has rsvg-convert),\n"
+        "  or install librsvg / inkscape / imagemagick / cairosvg."
     )
 
 

@@ -37,6 +37,29 @@ def get_version_info():
         return {"full": "dev", "build_time": "dev"}
 
 
+MIME_OVERRIDES = {
+    ".html": "text/html; charset=utf-8",
+    ".htm": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript",
+    ".mjs": "application/javascript",
+    ".json": "application/json",
+    ".webmanifest": "application/manifest+json",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".ico": "image/x-icon",
+    ".appcache": "text/cache-manifest",
+    ".bin": "application/octet-stream",
+    ".elf": "application/octet-stream",
+    ".wasm": "application/wasm",
+    ".txt": "text/plain; charset=utf-8",
+}
+
+
 def make_handler(base_dir, version, build_time):
     def translate(rel):
         # The autoloader HTML hardcodes /app/ for the ELF cache structure.
@@ -49,6 +72,12 @@ def make_handler(base_dir, version, build_time):
     class DevHandler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=base_dir, **kwargs)
+
+        def guess_type(self, path):
+            ext = posixpath.splitext(path)[1].lower()
+            if ext in MIME_OVERRIDES:
+                return MIME_OVERRIDES[ext]
+            return super().guess_type(path)
 
         def translate_path(self, path):
             rel = translate(self.path.split("?", 1)[0].split("#", 1)[0])

@@ -41,7 +41,7 @@ VERSION_PLACEHOLDER = b"[[VERSION_PLACEHOLDER]]"
 def read_base_version():
     """Read the base WKAL_VERSION from include/wkali.h."""
     try:
-        with open(WKALI_H) as f:
+        with open(WKALI_H, "r", encoding="utf-8") as f:
             content = f.read()
         m = re.search(r'#define\s+WKAL_VERSION\s+"([^"]+)"', content)
         if m:
@@ -54,11 +54,14 @@ def read_base_version():
 def git(*args):
     """Run a git command in the repo; returns stdout stripped or ''."""
     try:
-        return subprocess.run(
+        res = subprocess.run(
             ["git", *args], cwd=REPO, capture_output=True, text=True, errors="replace"
-        ).stdout.strip()
-    except OSError:
-        return ""
+        )
+        if res.returncode == 0:
+            return res.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return ""
 
 
 def get_version_info(build_type=None):
@@ -76,7 +79,7 @@ def get_version_info(build_type=None):
     dirty = git("status", "--porcelain")
     suffix = git_hash or "unknown"
     if dirty:
-        suffix = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        suffix = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
 
     if custom:
         full = f"{base}-{custom}"
@@ -138,11 +141,12 @@ def main(argv=None):
 
     # PS5 homescreen app metadata — title gets the base version (or the full
     # custom version) so the app label reflects what was built.
-    with open(PARAM_TEMPLATE, "rb") as f:
-        param = f.read()
-    write_if_changed(
-        PARAM_JSON, param.replace(VERSION_PLACEHOLDER, info["title"].encode("utf-8"))
-    )
+    if os.path.isfile(PARAM_TEMPLATE):
+        with open(PARAM_TEMPLATE, "rb") as f:
+            param = f.read()
+        write_if_changed(
+            PARAM_JSON, param.replace(VERSION_PLACEHOLDER, info["title"].encode("utf-8"))
+        )
     return 0
 
 

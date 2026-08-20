@@ -12,10 +12,22 @@ index 3ee132b..bcf6355 100644
          window.onload = function () {
              let autoload = sessionStorage.getItem(SESSIONSTORE_ON_LOAD_AUTORUN_KEY);
 diff --git a/main.js b/main.js
-index 9cbb675..fc07bce 100644
+index 9cbb675..95fd37e 100644
 --- a/main.js
 +++ b/main.js
-@@ -500,24 +500,21 @@ async function main(userlandRW, wkOnly = false) {
+@@ -158,6 +158,11 @@ function log(string, level) {
+     logElem.className = elemClass;
+     consoleElem.appendChild(logElem);
+ 
++    // WKAL: trim console DOM tree to 80 elements to prevent WebKit OOM
++    while (consoleElem.childElementCount > 80) {
++        consoleElem.removeChild(consoleElem.firstChild);
++    }
++
+     // scroll to bottom
+     consoleElem.scrollTop = consoleElem.scrollHeight;
+ }
+@@ -500,24 +505,21 @@ async function main(userlandRW, wkOnly = false) {
      let is_elfldr_running = await probe_sb_elfldr();
      await log("is elfldr running: " + is_elfldr_running, LogLevel.INFO);
      if (wkOnly && !is_elfldr_running) {
@@ -47,7 +59,7 @@ index 9cbb675..fc07bce 100644
          if (!response.ok) {
              throw new Error(`Failed to fetch the binary file. Status: ${response.status}`);
          }
-@@ -849,9 +846,9 @@ async function main(userlandRW, wkOnly = false) {
+@@ -849,9 +851,9 @@ async function main(userlandRW, wkOnly = false) {
              return res;
          }
  
@@ -59,7 +71,7 @@ index 9cbb675..fc07bce 100644
                  await parse_elf_store(total_sz);
                  await execute_elf_store();
                  return await wait_for_elf_to_exit();
-@@ -1182,6 +1179,27 @@ async function main(userlandRW, wkOnly = false) {
+@@ -1182,6 +1184,27 @@ async function main(userlandRW, wkOnly = false) {
      await new Promise(resolve => setTimeout(resolve, 300));
      await switchPage("payloads-view");
  
@@ -87,7 +99,7 @@ index 9cbb675..fc07bce 100644
  
      while (true) {
  
-@@ -1198,7 +1216,7 @@ async function main(userlandRW, wkOnly = false) {
+@@ -1198,7 +1221,7 @@ async function main(userlandRW, wkOnly = false) {
                      }
                  } else {
                      updateToastMessage(toast, `${payload_info.displayTitle}: Fetching...`);
@@ -96,7 +108,7 @@ index 9cbb675..fc07bce 100644
  
                      if (!payload_info.toPort) {
                          if (wkOnly) {
-@@ -1220,11 +1238,19 @@ async function main(userlandRW, wkOnly = false) {
+@@ -1220,11 +1243,19 @@ async function main(userlandRW, wkOnly = false) {
                          updateToastMessage(toast, `${payload_info.displayTitle}: Sending to port ${payload_info.toPort}...`);
                          await send_buffer_to_port(elf_store, total_sz, payload_info.toPort);
                          updateToastMessage(toast, `${payload_info.displayTitle}: Sent to port ${payload_info.toPort}`);

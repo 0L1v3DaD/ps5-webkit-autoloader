@@ -12,6 +12,7 @@
 
 static char log_buffer[LOG_BUFFER_SIZE];
 static size_t log_head = 0;
+static int log_shutdown = 0;
 static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t log_cond = PTHREAD_COND_INITIALIZER;
 
@@ -28,10 +29,14 @@ void wkali_log(const char *fmt, ...) {
     va_end(args);
 
     if (len > 0) {
+        size_t write_len = (size_t)len;
+        if (write_len >= sizeof(temp)) {
+            write_len = sizeof(temp) - 1;
+        }
         pthread_mutex_lock(&log_mutex);
-        if (log_head + len < LOG_BUFFER_SIZE) {
-            memcpy(log_buffer + log_head, temp, len);
-            log_head += len;
+        if (log_head + write_len < LOG_BUFFER_SIZE) {
+            memcpy(log_buffer + log_head, temp, write_len);
+            log_head += write_len;
             pthread_cond_broadcast(&log_cond);
         }
         pthread_mutex_unlock(&log_mutex);
@@ -39,7 +44,7 @@ void wkali_log(const char *fmt, ...) {
 }
 
 /* Wait for new logs starting from *pos. Copies up to max_len into out_buf. 
- * Returns the number of bytes copied. Blocks up to 1 second. */
+ * Returns the number of bytes copied. Blocks up to 1 second unless woken up. */
 size_t wkali_wait_logs(size_t *pos, char *out_buf, size_t max_len) {
     pthread_mutex_lock(&log_mutex);
     
@@ -49,9 +54,9 @@ size_t wkali_wait_logs(size_t *pos, char *out_buf, size_t max_len) {
     ts.tv_sec = tv.tv_sec + 1;
     ts.tv_nsec = tv.tv_usec * 1000;
 
-    while (*pos >= log_head) {
+    while (*pos >= log_head && !log_shutdown) {
         int rc = pthread_cond_timedwait(&log_cond, &log_mutex, &ts);
-        if (rc == ETIMEDOUT) {
+        if (rc == ETIMEDOUT || rc == EINTR) {
             break;
         }
     }
@@ -70,6 +75,7 @@ size_t wkali_wait_logs(size_t *pos, char *out_buf, size_t max_len) {
 
 void wkali_log_wakeup(void) {
     pthread_mutex_lock(&log_mutex);
+    log_shutdown = 1;
     pthread_cond_broadcast(&log_cond);
     pthread_mutex_unlock(&log_mutex);
 }
